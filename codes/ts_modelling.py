@@ -5,6 +5,7 @@ This script launches the tsa forecasting phase
 import os
 import pandas as pd
 import numpy as np
+import pmdarima as pmd
 
 from commons import DATA_PATH
 
@@ -18,7 +19,47 @@ def arimax_model(df_path, project_name, periodicity):
     :param periodicity: Periodicity level between observations
     :return model assessment metrics
     """
-    
+
+    df = pd.read_csv(df_path)
+    df.COMMIT_DATE = pd.to_datetime(df.COMMIT_DATE)
+
+    # Dependent variable
+    sqale_index = df.SQALE_INDEX.to_numpy()
+
+    # Independent variables
+    xregressors = df.iloc[:, 2:].to_numpy()
+
+    # Initial data splitting.
+    split_point = round(len(sqale_index))
+    training_sqale = sqale_index[:split_point]
+    testing_sqale = sqale_index[split_point:]
+    training_xregressors = xregressors[:split_point]
+    testing_xregressors = xregressors[split_point:]
+
+    variable_names = df.columns[1:]
+    xregresors_names = variable_names[1:]
+
+    # ARIMAX forecastomg by windows
+    # TBD
+
+    idx = 0
+    excluded_regressors = []  # Names of the excluded regressors during the modelling process.
+    while idx != len(sqale_index) - 1:
+
+
+        # Considers if there is no regressor to exclude.
+        try:
+            arima_model = pmd.auto_arima(y=training_sqale, X=training_xregressors, seasonal=True, stepwise=True,
+                                     error_action='trace')
+        except:  # If the arimax model could not converge.
+
+
+
+
+
+
+
+
 
 
 def ts_models():
@@ -55,7 +96,11 @@ def ts_models():
         if os.path.exists(monthly_results_path) and os.path.exists(biweekly_results_path):
             continue
 
-        # biweekly_statistics = arimax_model()
+        biweekly_statistics = arimax_model(df_path=os.path.join(biweekly_data_path, biweekly_files[i]),
+                                           project_name=project,
+                                           periodicity="biweekly")
         # Need to at results in the correct format to the DF
 
-        monthly_statistics = arimax_model()
+        monthly_statistics = arimax_model(df_path=os.path.join(monthly_results_path, monthly_files[i]),
+                                          project_name=project,
+                                          periodicity="monthly")
