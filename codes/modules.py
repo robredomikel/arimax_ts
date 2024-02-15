@@ -1,0 +1,39 @@
+import numpy as np
+from sklearn.metrics import mean_squared_error, mean_absolute_error, log_loss
+import os
+
+from ml_modelling import mlr_regression
+from commons import DATA_PATH
+
+
+def MAPE(predicted_vals, testing_vals):
+
+    y_true, y_pred = np.array(testing_vals), np.array(predicted_vals)
+    return np.mean(np.abs((y_true - y_pred)/y_true)) * 100
+
+
+def RMSE(predicted_vals, testing_vals):
+    return np.sqrt(mean_squared_error(testing_vals, predicted_vals))
+
+
+def assessmentMetrics(model, predicted_vals, testing_vals, pro_name):
+    """
+
+    Calculates MAPE, MSE, MAE, RMSE & LogLoss
+    :param model:
+    :param predicted_vals:
+    :param testing_vals:
+    :param pro_name:
+    :return:
+    """
+
+    mape_val = MAPE(predicted_vals=predicted_vals, testing_vals=testing_vals)
+    mse_val = mean_squared_error(testing_vals, predicted_vals)
+    mae_val = mean_absolute_error(testing_vals, predicted_vals)
+    rmse_val = RMSE(testing_vals=testing_vals, predicted_vals=predicted_vals)
+    logLogs_val = log_loss(testing_vals, predicted_vals)
+
+    return model, mape_val, mse_val, mae_val, rmse_val, logLogs_val
+
+
+
