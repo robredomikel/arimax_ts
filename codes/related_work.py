@@ -5,9 +5,126 @@ This script launches the related work forecasting phase
 import os
 import pandas as pd
 import numpy as np
-import pmdarima as pmd
+from pmdarima import auto_arima
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from statsmodels.tsa.arima_model import ARIMA
+import json
+import statsmodels.api as sm
 
+from modules import MAPE, RMSE
 from commons import DATA_PATH
+
+
+def regressor_forecast(df, vals_to_predict, periodicity, regressor_name, best_model_cfg):
+    """
+    Obtains the predicted values for the regressors in a greedy format through SARIMA modelling
+    """
+
+    arima_order = best_model_cfg[0]
+    s_order = best_model_cfg[1]
+    predictions = []
+    X_train = df[regressor_name].to_list()
+
+    for i in range(vals_to_predict):
+
+        model = ARIMA(X_train, order=arima_order, seasonal_order=s_order, enforce_stationarity=True,
+                      enforce_invertibility=True)
+        fitted_model = model.fit(disp=0)
+        y_pred = fitted_model.forecast()
+        predictions.append(y_pred)
+        X_train.append(y_pred)
+
+    return predictions
+
+
+def ols_prediction(train_df, test_df, prediction_regressors):
+    """
+
+    """
+
+    regressor_names = train_df.iloc[:, 2:].columns.tolist()
+    X = train_df[regressor_names]
+    X = sm.add_constant(X)
+    y = train_df["SQALE_INDEX"]
+
+    model = sm.OLS(y, X).fit()
+    real_y_vals = test_df["SQALE_INDEX"]
+    X_test = prediction_regressors
+    X_test = sm.add_constant(X_test)
+    predictions = []
+
+    for i in range(len(test_df)):
+
+        est = model.predict(X_test[i,:])
+        predictions.append(est)
+
+        ##########################################
+
+
+
+
+
+
+
+def backward_modelling(df, periodicity, vals_to_predict):
+    """
+    Finds the best modelling order for the SARIMA model and stores its' parameters, AIC value and useful regressors in
+    a JSON file
+    """
+    # Define the ranges for d and D since we are manually iterating over these
+    d_range = D_range = range(0, 3)
+    if periodicity == "monthly":
+        s = 12  # Seasonal period
+    else:
+        s = 26  # Bi-weekly periodicity
+
+    best_aic = np.inf
+    best_model_cfg = None
+
+    regressors = df.iloc[:, 2:].columns.tolist()
+
+    # Create a dictionary with the predicted values for each predictor
+    regressor_dict = {}
+
+    for regressor_name in regressors:
+        # Iterate over d and D values
+        for d in d_range:
+            for D in D_range:
+                # Use auto_arima to find the best p, q, P, Q given d and D
+                try:
+                    auto_arima_model = auto_arima(df[regressor_name], start_p=1, start_q=1,
+                                                  max_p=3, max_q=3, d=d, D=D, start_P=1, start_Q=1,
+                                                  max_P=3, max_Q=3, m=s, seasonal=True,
+                                                  stepwise=True, suppress_warnings=True,
+                                                  error_action='ignore', trace=False)
+
+                    # Extract the best ARIMA order and seasonal order found by auto_arima
+                    p, q = auto_arima_model.order[0], auto_arima_model.order[2]
+                    P, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[2]
+
+                    print(f"Best p, q combination: {p} {q} - Seasonal: {P} {Q}")
+                    print(f"d: {d}, D: {D}")
+
+                    if auto_arima_model.aic < best_aic:
+                        best_aic = auto_arima_model.aic
+                        best_model_cfg = ((p, d, q), (P, D, Q, s))
+
+                except Exception as e:
+                    print(f"Error with configuration: {(d, D)} - {str(e)}")
+                    continue
+
+        print(f"Best SARIMA{best_model_cfg} - AIC:{best_aic} for regressor {regressor_name}")
+
+        # Forecasting the values of the regressors for the testing
+        sarima_predictions = regressor_forecast(df=df, vals_to_predict=vals_to_predict, periodicity=periodicity,
+                                                regressor_name=regressor_name, best_model_cfg=best_model_cfg)
+        # Store the predicted values for the regressors in the dict of predictions
+        regressor_dict[regressor_name] = sarima_predictions
+
+    regressor_df = pd.DataFrame.from_dict(regressor_dict)
+
+    return regressor_df
 
 
 def relwork_model(df_path, project_name, periodicity):
@@ -28,15 +145,17 @@ def relwork_model(df_path, project_name, periodicity):
     # Dependent variable
     sqale_index = df.SQALE_INDEX.to_numpy()
 
-    # Independent variables
-    xregressors = df.iloc[:, 2:].to_numpy()
-
     # Initial data splitting.
-    split_point = round(len(sqale_index))
-    training_sqale = sqale_index[:split_point]
-    testing_sqale = sqale_index[split_point:]
-    training_xregressors = xregressors[:split_point]
-    testing_xregressors = xregressors[split_point:]
+    split_point = round(len(sqale_index)*0.8)
+    training_df = df.iloc[:split_point, :]
+    testing_df = df.iloc[split_point:, :]
+
+    # SARIMA regressor predictors
+    predicted_regressors = backward_modelling(df=training_df, periodicity=periodicity, vals_to_predict=len(testing_df))
+
+    # LM prediction phase
+    ols_prediction(train_df=training_df, test_df=testing_df, prediction_regressors=predicted_regressors)
+
 
 
 

@@ -6,10 +6,9 @@ import os
 import pandas as pd
 import numpy as np
 from pmdarima import auto_arima
-from sklearn.tree._criterion import MSE, MAE
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 import json
-from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 from commons import DATA_PATH
 from modules import MAPE, RMSE
@@ -38,8 +37,8 @@ def backward_modelling(df, periodicity):
             # Use auto_arima to find the best p, q, P, Q given d and D
             try:
                 auto_arima_model = auto_arima(df['SQALE_INDEX'], start_p=1, start_q=1,
-                                              max_p=5, max_q=5, d=d, D=D, start_P=1, start_Q=1,
-                                              max_P=2, max_Q=2, m=s, seasonal=True,
+                                              max_p=3, max_q=3, d=d, D=D, start_P=1, start_Q=1,
+                                              max_P=3, max_Q=3, m=s, seasonal=True,
                                               stepwise=True, suppress_warnings=True,
                                               error_action='ignore', trace=False)
 
@@ -119,8 +118,8 @@ def assessment_metrics(predictions, real_values):
 
     """
     mape_val = MAPE(real_values, predictions)
-    mse_val = MSE(real_values, predictions)
-    mae_val = MAE(real_values, predictions)
+    mse_val = mean_squared_error(real_values, predictions)
+    mae_val = mean_absolute_error(real_values, predictions)
     rmse_val = RMSE(real_values, predictions)
 
     return mape_val, mse_val, mae_val, rmse_val
@@ -139,7 +138,7 @@ def arimax_model(df_path, project_name, periodicity):
     df = pd.read_csv(df_path)
     df.COMMIT_DATE = pd.to_datetime(df.COMMIT_DATE)
     sqale_index = df.SQALE_INDEX.to_numpy()  # Dependent variable
-    split_point = round(len(sqale_index)*0.8) # Initial data splitting. (80% training 20% testing)
+    split_point = round(len(sqale_index)*0.8)  # Initial data splitting. (80% training 20% testing)
     training_df = df.iloc[:split_point, :]
     testing_df = df.iloc[split_point:, :]
 
@@ -217,3 +216,5 @@ def ts_models():
 
         monthly_assessment.loc[len(monthly_assessment)] = monthly_statistics
         monthly_assessment.to_csv(monthly_results_path, index=False)
+
+    print("SARIMAX stage performed!")
