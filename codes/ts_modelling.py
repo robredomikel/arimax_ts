@@ -6,15 +6,19 @@ import os
 import pandas as pd
 import numpy as np
 from pmdarima import auto_arima
+from sklearn.tree._criterion import MSE, MAE
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 import json
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 from commons import DATA_PATH
+from modules import MAPE, RMSE
 
 
 def backward_modelling(df, periodicity):
     """
-
+    Finds the best modelling order for the SARIMAX model and stores its' parameters, AIC value and useful regressors in
+    a JSON file
     """
 
     # Define the ranges for d and D since we are manually iterating over these
@@ -86,7 +90,40 @@ def model_testing(training_df, testing_df, best_model_cfg, best_regressors):
     """
 
     """
-    
+
+    arima_order = best_model_cfg[0]
+    s_order = best_model_cfg[1]
+
+    predictions = []
+
+    for i in range(len(testing_df)):
+        # Training the SARIMAX model
+        X_train = training_df[best_regressors]
+        y_train = training_df['SQALE_INDEX']
+        model = SARIMAX(y_train, exog=X_train, order=arima_order, seasonal_order=s_order,
+                        enforce_stationarity=True, enforce_invertibility=True)
+        fitted_model = model.fit(disp=0)
+
+        X_test = testing_df.iloc[i][best_regressors].values.reshape(1,-1)
+        y_pred = fitted_model.forecast(exog=X_test)
+        predictions.append(y_pred[0])
+
+        new_obs = testing_df.iloc[i, :]
+        training_df = pd.concat([training_df, new_obs], ignore_index=True)
+
+    return predictions, fitted_model.aic, fitted_model.bic
+
+
+def assessment_metrics(predictions, real_values):
+    """
+
+    """
+    mape_val = MAPE(real_values, predictions)
+    mse_val = MSE(real_values, predictions)
+    mae_val = MAE(real_values, predictions)
+    rmse_val = RMSE(real_values, predictions)
+
+    return mape_val, mse_val, mae_val, rmse_val
 
 
 def arimax_model(df_path, project_name, periodicity):
@@ -101,15 +138,8 @@ def arimax_model(df_path, project_name, periodicity):
 
     df = pd.read_csv(df_path)
     df.COMMIT_DATE = pd.to_datetime(df.COMMIT_DATE)
-
-    # Dependent variable
-    sqale_index = df.SQALE_INDEX.to_numpy()
-
-    # Independent variables
-    xregressors = df.iloc[:, 2:].to_numpy()
-
-    # Initial data splitting. (80% training 20% testing)
-    split_point = round(len(sqale_index)*0.8)
+    sqale_index = df.SQALE_INDEX.to_numpy()  # Dependent variable
+    split_point = round(len(sqale_index)*0.8) # Initial data splitting. (80% training 20% testing)
     training_df = df.iloc[:split_point, :]
     testing_df = df.iloc[split_point:, :]
 
@@ -123,14 +153,20 @@ def arimax_model(df_path, project_name, periodicity):
         os.mkdir(best_model_path, "biweekly")
         os.mkdir(best_model_path, "monthly")
 
+    # Stores the results in a json file
     json_dict = {'model_params': best_model_params, 'best_aic': best_aic, "best_regressors": best_regressors}
     json_object = json.dumps(json_dict, indent=4)
     with open(os.path.join(best_model_path, periodicity, f"{project_name}.json")) as out:
         out.write(json_object)
 
     # Model testing
-    model_testing()
+    predictions, aic_val, bic_val = model_testing(training_df=training_df, testing_df=testing_df,
+                                best_model_cfg=best_model_params, best_regressors=best_regressors)
 
+    assessment_vals = assessment_metrics(predictions=predictions, real_values=testing_df["SQALE_INDEX"].to_list())
+
+    return [project_name, assessment_vals[0], assessment_vals[1], assessment_vals[2], assessment_vals[3],
+            aic_val, bic_val]
 
 
 def ts_models():
@@ -167,11 +203,17 @@ def ts_models():
         if os.path.exists(monthly_results_path) and os.path.exists(biweekly_results_path):
             continue
 
+        # Runs the SARIMAX execution for the given project in biweekly format
         biweekly_statistics = arimax_model(df_path=os.path.join(biweekly_data_path, biweekly_files[i]),
                                            project_name=project,
                                            periodicity="biweekly")
 
-        # Need to at results in the correct format to the DF
+        biweekly_assessment.loc[len(biweekly_statistics)] = biweekly_statistics
+        biweekly_assessment.to_csv(biweekly_results_path, index=False)
+
         monthly_statistics = arimax_model(df_path=os.path.join(monthly_results_path, monthly_files[i]),
                                           project_name=project,
                                           periodicity="monthly")
+
+        monthly_assessment.loc[len(monthly_assessment)] = monthly_statistics
+        monthly_assessment.to_csv(monthly_results_path, index=False)
