@@ -350,11 +350,13 @@ def ml_models():
             complete_results = models[i](complete_train, complete_test, project_name)
 
             # Updating biweekly results
-            biweekly_assessment_df[j,:] = biweekly_results
+            biweekly_assessment_df[j, :] = biweekly_results
             # Updating monthly results
-            monthly_assessment_df[j,:] = monthly_results
+            monthly_assessment_df[j, :] = monthly_results
             # updating complete results
-            complete_assessment_df[j,:] = complete_results
+            complete_assessment_df[j, :] = complete_results
+
+            print(f"> <{ml_model_names[i]}> ML modelling for project <{project_name}> performed - {j+1}/{len(biweekly_files)} projects - {i+1} of {len(models)}")
 
         # Saving the results per periods in csv
         biweekly_assessment_df.to_csv(biweekly_path, index=False)

@@ -172,7 +172,7 @@ def related_models():
 
     biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data")
     monthly_data_path = os.path.join(DATA_PATH, "monthly_data")
-    output_path = os.path.join(DATA_PATH, "results")
+    output_path = os.path.join(DATA_PATH, "related_work_results")
     if not os.path.exists(output_path):
         os.mkdir(output_path)
 
@@ -193,8 +193,8 @@ def related_models():
             os.mkdir(os.path.join(relwork_results_path, "monthly_results"))
             os.mkdir(os.path.join(relwork_results_path, "biweekly_results"))
 
-        monthly_results_path = os.path.join(relwork_results_path, "monthly_results", project)
-        biweekly_results_path = os.path.join(relwork_results_path, "biweekly_results", project)
+        monthly_results_path = os.path.join(relwork_results_path, "monthly_results", f"{project}.csv")
+        biweekly_results_path = os.path.join(relwork_results_path, "biweekly_results", f"{project}.csv")
 
         if os.path.exists(monthly_results_path) and os.path.exists(biweekly_results_path):
             continue
@@ -202,8 +202,18 @@ def related_models():
         biweekly_statistics = relwork_model(df_path=os.path.join(biweekly_data_path, biweekly_files[i]),
                                            project_name=project,
                                            periodicity="biweekly")
+
         # Need to at results in the correct format to the DF
+        biweekly_assessment.loc[len(biweekly_assessment)] = biweekly_statistics
+        biweekly_assessment.to_csv(biweekly_results_path, index=False)
 
         monthly_statistics = relwork_model(df_path=os.path.join(monthly_results_path, monthly_files[i]),
                                           project_name=project,
                                           periodicity="monthly")
+
+        monthly_assessment.loc[len(monthly_assessment)] = monthly_statistics
+        monthly_assessment.to_csv(biweekly_results_path, index=False)
+
+        print(f"> SARIMA + LM modelling for project <{project}> performed - {i+1}/{len(biweekly_files)}")
+
+    print("> SARIMA + LM stage performed!")
