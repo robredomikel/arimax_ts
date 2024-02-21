@@ -162,7 +162,7 @@ def arimax_model(df_path, project_name, periodicity):
     predictions, aic_val, bic_val = model_testing(training_df=training_df, testing_df=testing_df,
                                 best_model_cfg=best_model_params, best_regressors=best_regressors)
 
-    assessment_vals = assessment_metrics(predictions=predictions, real_values=testing_df["SQALE_INDEX"].to_list())
+    assessment_vals = assessment_metrics(predictions=predictions, real_values=testing_df["SQALE_INDEX"].tolist())
 
     return [project_name, assessment_vals[0], assessment_vals[1], assessment_vals[2], assessment_vals[3],
             aic_val, bic_val]

@@ -1,4 +1,4 @@
 data/
 myenv/
 .idea/
-codes/draft.ipynb
+codes/*.ipynb

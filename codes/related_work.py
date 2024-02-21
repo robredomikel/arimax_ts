@@ -11,9 +11,11 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.arima_model import ARIMA
 import json
 import statsmodels.api as sm
+from collections import deque
 
 from modules import MAPE, RMSE
 from commons import DATA_PATH
+from ts_modelling import assessment_metrics
 
 
 def regressor_forecast(df, vals_to_predict, periodicity, regressor_name, best_model_cfg):
@@ -24,7 +26,7 @@ def regressor_forecast(df, vals_to_predict, periodicity, regressor_name, best_mo
     arima_order = best_model_cfg[0]
     s_order = best_model_cfg[1]
     predictions = []
-    X_train = df[regressor_name].to_list()
+    X_train = df[regressor_name].tolist()
 
     for i in range(vals_to_predict):
 
@@ -43,28 +45,27 @@ def ols_prediction(train_df, test_df, prediction_regressors):
 
     """
 
+    # Assign the data to X and Y.
     regressor_names = train_df.iloc[:, 2:].columns.tolist()
     X = train_df[regressor_names]
     X = sm.add_constant(X)
     y = train_df["SQALE_INDEX"]
-
+    # Create and fit the model
     model = sm.OLS(y, X).fit()
     real_y_vals = test_df["SQALE_INDEX"]
     X_test = prediction_regressors
     X_test = sm.add_constant(X_test)
     predictions = []
 
+    # Perform the walk forward optimization for one step ahead
     for i in range(len(test_df)):
 
-        est = model.predict(X_test[i,:])
+        est = model.predict(X_test[i, :])
         predictions.append(est)
 
-        ##########################################
+    mape_val, mse_val, mae_val, rmse_val = assessment_metrics(predictions=predictions, real_values=real_y_vals.tolist())
 
-
-
-
-
+    return [mape_val, mse_val, mae_val, rmse_val, model.aic, model.bic]
 
 
 def backward_modelling(df, periodicity, vals_to_predict):
@@ -154,10 +155,14 @@ def relwork_model(df_path, project_name, periodicity):
     predicted_regressors = backward_modelling(df=training_df, periodicity=periodicity, vals_to_predict=len(testing_df))
 
     # LM prediction phase
-    ols_prediction(train_df=training_df, test_df=testing_df, prediction_regressors=predicted_regressors)
+    predicted_y_vals = ols_prediction(train_df=training_df, test_df=testing_df, prediction_regressors=predicted_regressors)
 
+    # return the final output
+    assessment_stats = deque(predicted_y_vals)
+    assessment_stats.appendleft(project_name)
+    assessment_stats = list(assessment_stats)
 
-
+    return assessment_stats
 
 
 def related_models():
