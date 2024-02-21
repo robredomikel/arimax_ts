@@ -8,7 +8,7 @@ import os
 from ml_modelling import ml_models
 from ts_modelling import ts_models
 from related_work import related_models
-from commons import DATA_PATH, SARIMAX, RELATED_WORK, ML_MODELS
+from commons import SARIMAX, RELATED_WORK, ML_MODELS
 
 
 def main():
@@ -24,3 +24,7 @@ def main():
     # ML stage
     if ML_MODELS:
         ml_models()
+
+
+if __name__ == '__main__':
+    main()

@@ -35,6 +35,7 @@ def backward_modelling(df, periodicity):
     for d in d_range:
         for D in D_range:
             # Use auto_arima to find the best p, q, P, Q given d and D
+            print(f"d: {d}, D: {D}")
             try:
                 auto_arima_model = auto_arima(df['SQALE_INDEX'], start_p=1, start_q=1,
                                               max_p=3, max_q=3, d=d, D=D, start_P=1, start_Q=1,
@@ -47,14 +48,15 @@ def backward_modelling(df, periodicity):
                 P, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[2]
 
                 print(f"Best p, q combination: {p} {q} - Seasonal: {P} {Q}")
-                print(f"d: {d}, D: {D}")
                 # Begin backward selection of regressors
                 current_regressors = df.iloc[:, 2:].columns.tolist()
                 while current_regressors:
                     tmp_X = df[current_regressors]
+                    print(current_regressors)
                     model = SARIMAX(df['SQALE_INDEX'], exog=tmp_X, order=(p, d, q),
                                     seasonal_order=(P, D, Q, s),
                                     enforce_stationarity=True, enforce_invertibility=True)
+                    print("Fitting model...")
                     results = model.fit(disp=0)
                     if results.aic < best_aic:
                         best_aic = results.aic
@@ -75,6 +77,7 @@ def backward_modelling(df, periodicity):
                         aic_with_regressor_removed.sort()
                         current_regressors.remove(aic_with_regressor_removed[0][1])
                     else:
+                        print("break")
                         break  # Stop if only one regressor left
                     print(f"Number of remaining predictors: {len(current_regressors)}")
             except Exception as e:

@@ -2,9 +2,6 @@ import numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_error, log_loss
 import os
 
-from ml_modelling import mlr_regression
-from commons import DATA_PATH
-
 
 def MAPE(predicted_vals, testing_vals):
 
