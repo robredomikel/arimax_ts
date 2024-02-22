@@ -6,6 +6,7 @@ import os
 import pandas as pd
 import numpy as np
 from pmdarima import auto_arima
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 import json
@@ -32,8 +33,8 @@ def backward_modelling(df, periodicity):
     best_regressors = None
 
     # Iterate over d and D values
-    for d in d_range:
-        for D in D_range:
+    for D in d_range:
+        for d in D_range:
             # Use auto_arima to find the best p, q, P, Q given d and D
             print(f"d: {d}, D: {D}")
             try:
@@ -69,11 +70,17 @@ def backward_modelling(df, periodicity):
                             try_regressors = current_regressors.copy()
                             try_regressors.remove(regressor)
                             tmp_X_try = df[try_regressors]
-                            model_try = SARIMAX(df['SQALE_INDEX'], exog=tmp_X_try, order=(p, d, q),
-                                                seasonal_order=(P, D, Q, s),
-                                                enforce_stationarity=True, enforce_invertibility=True)
-                            results_try = model_try.fit(disp=0)
-                            aic_with_regressor_removed.append((results_try.aic, regressor))
+
+                            try:
+                                model_try = SARIMAX(df['SQALE_INDEX'], exog=tmp_X_try, order=(p, d, q),
+                                                    seasonal_order=(P, D, Q, s),
+                                                    enforce_stationarity=True, enforce_invertibility=True)
+                                results_try = model_try.fit(disp=0)
+                                aic_with_regressor_removed.append((results_try.aic, regressor))
+                            except ConvergenceWarning:
+                                print(f"Failed to converge for model excluding {regressor}. Skipping...")
+                                continue
+
                         aic_with_regressor_removed.sort()
                         current_regressors.remove(aic_with_regressor_removed[0][1])
                     else:
@@ -158,8 +165,8 @@ def arimax_model(df_path, project_name, periodicity):
     best_model_path = os.path.join(DATA_PATH, "best_sarimax_models")
     if not os.path.exists(best_model_path):
         os.mkdir(best_model_path)
-        os.mkdir(best_model_path, "biweekly")
-        os.mkdir(best_model_path, "monthly")
+        os.mkdir(os.path.join(best_model_path, "biweekly"))
+        os.mkdir(os.path.join(best_model_path, "monthly"))
 
     # Stores the results in a json file
     json_dict = {'model_params': best_model_params, 'best_aic': best_aic, "best_regressors": best_regressors}
