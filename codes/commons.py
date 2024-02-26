@@ -5,5 +5,5 @@ assessment_statistics = ["PROJECT", "MAPE", "MSE", "MAE", "RMSE", "log Loss/Cros
 
 # Flag values for process control of the project
 SARIMAX = True
-RELATED_WORK = True
-ML_MODELS = True
+RELATED_WORK = False
+ML_MODELS = False

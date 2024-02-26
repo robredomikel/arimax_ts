@@ -21,8 +21,15 @@ def backward_modelling(df, periodicity):
     a JSON file
     """
 
+    # Dependent variable
+    sqale_index = df.SQALE_INDEX.to_numpy()
+    # Initial data splitting.
+    split_point = round(len(sqale_index)*0.8)
+    training_df = df.iloc[:split_point, :]
+    testing_df = df.iloc[split_point:, :]
+
     # Define the ranges for d and D since we are manually iterating over these
-    d_range = D_range = range(0, 3)
+    d_range = D_range = range(0, 4)
     if periodicity == "monthly":
         s = 12  # Seasonal period
     else:
@@ -36,9 +43,10 @@ def backward_modelling(df, periodicity):
     for D in d_range:
         for d in D_range:
             # Use auto_arima to find the best p, q, P, Q given d and D
+            print("##############################################################################")
             print(f"d: {d}, D: {D}")
             try:
-                auto_arima_model = auto_arima(df['SQALE_INDEX'], start_p=1, start_q=1,
+                auto_arima_model = auto_arima(training_df['SQALE_INDEX'], start_p=1, start_q=1,
                                               max_p=3, max_q=3, d=d, D=D, start_P=1, start_Q=1,
                                               max_P=3, max_Q=3, m=s, seasonal=True,
                                               stepwise=True, suppress_warnings=True,
@@ -50,11 +58,12 @@ def backward_modelling(df, periodicity):
 
                 print(f"Best p, q combination: {p} {q} - Seasonal: {P} {Q}")
                 # Begin backward selection of regressors
-                current_regressors = df.iloc[:, 2:].columns.tolist()
+                current_regressors = training_df.iloc[:, 2:].columns.tolist()
                 while current_regressors:
-                    tmp_X = df[current_regressors]
+                    tmp_X = training_df[current_regressors]
+                    tmp_X_scaled = np.log1p(tmp_X)
                     print(current_regressors)
-                    model = SARIMAX(df['SQALE_INDEX'], exog=tmp_X, order=(p, d, q),
+                    model = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_scaled, order=(p, d, q),
                                     seasonal_order=(P, D, Q, s),
                                     enforce_stationarity=True, enforce_invertibility=True)
                     print("Fitting model...")
@@ -69,10 +78,11 @@ def backward_modelling(df, periodicity):
                         for regressor in current_regressors:
                             try_regressors = current_regressors.copy()
                             try_regressors.remove(regressor)
-                            tmp_X_try = df[try_regressors]
+                            tmp_X_try = training_df[try_regressors]
+                            tmp_X_try_scaled = np.log1p(tmp_X_try)
 
                             try:
-                                model_try = SARIMAX(df['SQALE_INDEX'], exog=tmp_X_try, order=(p, d, q),
+                                model_try = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_try_scaled, order=(p, d, q),
                                                     seasonal_order=(P, D, Q, s),
                                                     enforce_stationarity=True, enforce_invertibility=True)
                                 results_try = model_try.fit(disp=0)
@@ -92,7 +102,7 @@ def backward_modelling(df, periodicity):
                 continue
 
     print(f"Best SARIMAX{best_model_cfg} - AIC:{best_aic} with regressors {best_regressors}")
-    return best_model_cfg, best_aic, best_regressors
+    return best_model_cfg, round(best_aic, 2), best_regressors
 
 
 def model_testing(training_df, testing_df, best_model_cfg, best_regressors):
@@ -110,22 +120,26 @@ def model_testing(training_df, testing_df, best_model_cfg, best_regressors):
         # Training the SARIMAX model
         X_train = training_df[best_regressors]
         y_train = training_df['SQALE_INDEX']
+        X_train_scaled = np.log1p(X_train)
 
         # Model fitting
-        model = SARIMAX(y_train, exog=X_train, order=arima_order, seasonal_order=s_order,
-                        enforce_stationarity=True, enforce_invertibility=True)
+        model = SARIMAX(y_train, exog=X_train_scaled, order=arima_order, seasonal_order=s_order,
+                        enforce_stationarity=True, enforce_invertibility=True, maxiter=100)
         fitted_model = model.fit(disp=0)
+        print(f"model fit {i} times")
 
         # Model forecasting
-        X_test = testing_df.loc[i][best_regressors].values.reshape(1, -1)
+        best_reg_df = testing_df[best_regressors]
+        best_reg_df_scaled = np.log1p(best_reg_df)
+        X_test = best_reg_df_scaled.iloc[i, :].values.reshape(1, -1)
         y_pred = fitted_model.forecast(exog=X_test)
-        predictions.append(y_pred[0])
+        predictions.append(y_pred.values[0])
 
         # Expand the training data for next iteration
         new_obs = testing_df.iloc[i, :]
         training_df = pd.concat([training_df, new_obs], ignore_index=True)
 
-    return predictions, fitted_model.aic, fitted_model.bic
+    return predictions, round(fitted_model.aic, 2), round(fitted_model.bic, 2)
 
 
 def assessment_metrics(predictions, real_values):
@@ -159,7 +173,11 @@ def arimax_model(df_path, project_name, periodicity):
     testing_df = df.iloc[split_point:, :]
 
     # SARIMAX backward modelling
-    best_model_params, best_aic, best_regressors = backward_modelling(df=training_df, periodicity=periodicity)
+    # best_model_params, best_aic, best_regressors = backward_modelling(df=training_df, periodicity=periodicity)
+    best_model_params = (1, 0, 1), (2, 3, 0, 26)
+    best_aic = -150.4826387573319
+    best_regressors = ['S1213', 'RedundantThrowsDeclarationCheck', 'S1488', 'S1905', 'DuplicatedBlocks', 'S00108',
+                       'S1151', 'S1132', 'S1481']
 
     # Store the obtained results in json:
     best_model_path = os.path.join(DATA_PATH, "best_sarimax_models")
@@ -171,7 +189,7 @@ def arimax_model(df_path, project_name, periodicity):
     # Stores the results in a json file
     json_dict = {'model_params': best_model_params, 'best_aic': best_aic, "best_regressors": best_regressors}
     json_object = json.dumps(json_dict, indent=4)
-    with open(os.path.join(best_model_path, periodicity, f"{project_name}.json")) as out:
+    with open(os.path.join(best_model_path, periodicity, f"{project_name}.json"), 'w+') as out:
         out.write(json_object)
 
     # Model testing
