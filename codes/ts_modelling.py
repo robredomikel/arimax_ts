@@ -68,7 +68,7 @@ def backward_modelling(df, periodicity):
                                     enforce_stationarity=True, enforce_invertibility=True)
                     print("Fitting model...")
                     results = model.fit(disp=0)
-                    if results.aic < best_aic:
+                    if abs(results.aic) < abs(best_aic):
                         best_aic = results.aic
                         best_model_cfg = ((p, d, q), (P, D, Q, s))
                         best_regressors = current_regressors.copy()
@@ -85,7 +85,7 @@ def backward_modelling(df, periodicity):
                                 model_try = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_try_scaled, order=(p, d, q),
                                                     seasonal_order=(P, D, Q, s),
                                                     enforce_stationarity=True, enforce_invertibility=True)
-                                results_try = model_try.fit(disp=0)
+                                results_try = model_try.fit(disp=0, maxiter=100)
                                 aic_with_regressor_removed.append((results_try.aic, regressor))
                             except ConvergenceWarning:
                                 print(f"Failed to converge for model excluding {regressor}. Skipping...")
@@ -118,26 +118,25 @@ def model_testing(training_df, testing_df, best_model_cfg, best_regressors):
 
     for i in range(len(testing_df)):
         # Training the SARIMAX model
-        X_train = training_df[best_regressors]
-        y_train = training_df['SQALE_INDEX']
-        X_train_scaled = np.log1p(X_train)
+        X_train = training_df[best_regressors].astype(float)
+        y_train = training_df['SQALE_INDEX'].astype(float)
+        X_train_scaled = X_train.map(np.log1p)
 
         # Model fitting
-        model = SARIMAX(y_train, exog=X_train_scaled, order=arima_order, seasonal_order=s_order,
-                        enforce_stationarity=True, enforce_invertibility=True, maxiter=100)
-        fitted_model = model.fit(disp=0)
+        model = SARIMAX(y_train.to_numpy(), exog=X_train_scaled.to_numpy(), order=arima_order, seasonal_order=s_order,
+                        enforce_stationarity=True, enforce_invertibility=True)
+        fitted_model = model.fit(disp=0, maxiter=100)
         print(f"model fit {i} times")
 
         # Model forecasting
         best_reg_df = testing_df[best_regressors]
         best_reg_df_scaled = np.log1p(best_reg_df)
         X_test = best_reg_df_scaled.iloc[i, :].values.reshape(1, -1)
-        y_pred = fitted_model.forecast(exog=X_test)
-        predictions.append(y_pred.values[0])
-
+        y_pred = fitted_model.get_forecast(steps=1, exog=X_test)
+        predictions.append(y_pred.predicted_mean[0])
         # Expand the training data for next iteration
         new_obs = testing_df.iloc[i, :]
-        training_df = pd.concat([training_df, new_obs], ignore_index=True)
+        training_df = pd.concat([training_df, new_obs.to_frame().T], ignore_index=False, axis=0)
 
     return predictions, round(fitted_model.aic, 2), round(fitted_model.bic, 2)
 
@@ -175,9 +174,9 @@ def arimax_model(df_path, project_name, periodicity):
     # SARIMAX backward modelling
     # best_model_params, best_aic, best_regressors = backward_modelling(df=training_df, periodicity=periodicity)
     best_model_params = (1, 0, 1), (2, 3, 0, 26)
-    best_aic = -150.4826387573319
-    best_regressors = ['S1213', 'RedundantThrowsDeclarationCheck', 'S1488', 'S1905', 'DuplicatedBlocks', 'S00108',
-                       'S1151', 'S1132', 'S1481']
+    best_aic = -144.89
+    best_regressors = ['S1213', 'RedundantThrowsDeclarationCheck', 'S00122', 'S1488', 'DuplicatedBlocks', 'S1155',
+                       'S1151', 'S1132']
 
     # Store the obtained results in json:
     best_model_path = os.path.join(DATA_PATH, "best_sarimax_models")
@@ -198,6 +197,11 @@ def arimax_model(df_path, project_name, periodicity):
 
     assessment_vals = assessment_metrics(predictions=predictions, real_values=testing_df["SQALE_INDEX"].tolist())
 
+    print(f"> Final results for project {project_name}:\n"
+          f"MAPE:{assessment_vals[0]}\n"
+          f"MSE:{assessment_vals[1]}\n"
+          f"MAE:{assessment_vals[2]}\n"
+          f"RMSE:{assessment_vals[3]}\n")
     return [project_name, assessment_vals[0], assessment_vals[1], assessment_vals[2], assessment_vals[3],
             aic_val, bic_val]
 
@@ -241,7 +245,7 @@ def ts_models():
         biweekly_assessment.loc[len(biweekly_assessment)] = biweekly_statistics
         biweekly_assessment.to_csv(biweekly_results_path, index=False)
 
-        monthly_statistics = arimax_model(df_path=os.path.join(monthly_results_path, monthly_files[i]),
+        monthly_statistics = arimax_model(df_path=os.path.join(monthly_data_path, monthly_files[i]),
                                           project_name=project,
                                           periodicity="monthly")
 
