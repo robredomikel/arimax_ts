@@ -145,10 +145,10 @@ def assessment_metrics(predictions, real_values):
     """
     Performs the calculations of the statistics defined for performance assessment
     """
-    mape_val = MAPE(real_values, predictions)
-    mse_val = mean_squared_error(real_values, predictions)
-    mae_val = mean_absolute_error(real_values, predictions)
-    rmse_val = RMSE(real_values, predictions)
+    mape_val = round(MAPE(real_values, predictions), 2)
+    mse_val = round(mean_squared_error(real_values, predictions), 2)
+    mae_val = round(mean_absolute_error(real_values, predictions), 2)
+    rmse_val = round(RMSE(real_values, predictions), 2)
 
     return mape_val, mse_val, mae_val, rmse_val
 
@@ -172,11 +172,10 @@ def arimax_model(df_path, project_name, periodicity):
     testing_df = df.iloc[split_point:, :]
 
     # SARIMAX backward modelling
-    # best_model_params, best_aic, best_regressors = backward_modelling(df=training_df, periodicity=periodicity)
-    best_model_params = (1, 0, 1), (2, 3, 0, 26)
-    best_aic = -144.89
-    best_regressors = ['S1213', 'RedundantThrowsDeclarationCheck', 'S00122', 'S1488', 'DuplicatedBlocks', 'S1155',
-                       'S1151', 'S1132']
+    best_model_params, best_aic, best_regressors = backward_modelling(df=training_df, periodicity=periodicity)
+    # best_model_params = (1, 0, 1), (2, 3, 0, 26)
+    # best_aic = -144.89
+    # best_regressors = ['S1213', 'RedundantThrowsDeclarationCheck', 'S00122', 'S1488', 'DuplicatedBlocks', 'S1155', 'S1151', 'S1132']
 
     # Store the obtained results in json:
     best_model_path = os.path.join(DATA_PATH, "best_sarimax_models")
@@ -238,12 +237,12 @@ def ts_models():
             continue
 
         # Runs the SARIMAX execution for the given project in biweekly format
-        biweekly_statistics = arimax_model(df_path=os.path.join(biweekly_data_path, biweekly_files[i]),
-                                           project_name=project,
-                                           periodicity="biweekly")
+        #biweekly_statistics = arimax_model(df_path=os.path.join(biweekly_data_path, biweekly_files[i]),
+        #                                   project_name=project,
+        #                                   periodicity="biweekly")
 
-        biweekly_assessment.loc[len(biweekly_assessment)] = biweekly_statistics
-        biweekly_assessment.to_csv(biweekly_results_path, index=False)
+        #biweekly_assessment.loc[len(biweekly_assessment)] = biweekly_statistics
+        #biweekly_assessment.to_csv(biweekly_results_path, index=False)
 
         monthly_statistics = arimax_model(df_path=os.path.join(monthly_data_path, monthly_files[i]),
                                           project_name=project,

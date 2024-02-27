@@ -4,13 +4,23 @@ import os
 
 
 def MAPE(predicted_vals, testing_vals):
-
     y_true, y_pred = np.array(testing_vals), np.array(predicted_vals)
     return np.mean(np.abs((y_true - y_pred)/y_true)) * 100
 
 
+def MAE(predicted_vals, testing_vals):
+    y_true, y_pred = np.array(testing_vals), np.array(predicted_vals)
+    return np.mean(np.abs((y_true - y_pred)))
+
+
+def MSE(predicted_vals, testing_vals):
+    y_true, y_pred = np.array(testing_vals), np.array(predicted_vals)
+    return mean_squared_error(y_true, y_pred)
+
+
 def RMSE(predicted_vals, testing_vals):
-    return np.sqrt(mean_squared_error(testing_vals, predicted_vals))
+    y_true, y_pred = np.array(testing_vals), np.array(predicted_vals)
+    return np.sqrt(MSE(y_true, y_pred))
 
 
 def assessmentMetrics(model, predicted_vals, testing_vals, pro_name):
