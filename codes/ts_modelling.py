@@ -7,12 +7,11 @@ import pandas as pd
 import numpy as np
 from pmdarima import auto_arima
 from sklearn.exceptions import ConvergenceWarning
-from sklearn.metrics import mean_squared_error, mean_absolute_error
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 import json
 
 from commons import DATA_PATH
-from modules import MAPE, RMSE
+from modules import MAPE, RMSE, MAE, MSE
 
 
 def backward_modelling(df, periodicity):
@@ -46,9 +45,7 @@ def backward_modelling(df, periodicity):
             print("##############################################################################")
             print(f"d: {d}, D: {D}")
             try:
-                auto_arima_model = auto_arima(training_df['SQALE_INDEX'], start_p=1, start_q=1,
-                                              max_p=3, max_q=3, d=d, D=D, start_P=1, start_Q=1,
-                                              max_P=3, max_Q=3, m=s, seasonal=True,
+                auto_arima_model = auto_arima(training_df['SQALE_INDEX'], d=d, D=D, m=s, seasonal=True,
                                               stepwise=True, suppress_warnings=True,
                                               error_action='ignore', trace=False)
 
@@ -57,6 +54,8 @@ def backward_modelling(df, periodicity):
                 P, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[2]
 
                 print(f"Best p, q combination: {p} {q} - Seasonal: {P} {Q}")
+                print(f"d: {d}, D: {D}")
+
                 # Begin backward selection of regressors
                 current_regressors = training_df.iloc[:, 2:].columns.tolist()
                 while current_regressors:
@@ -68,8 +67,8 @@ def backward_modelling(df, periodicity):
                                     enforce_stationarity=True, enforce_invertibility=True)
                     print("Fitting model...")
                     results = model.fit(disp=0)
-                    if abs(results.aic) < abs(best_aic):
-                        best_aic = results.aic
+                    if abs(results.aic()) < abs(best_aic):
+                        best_aic = results.aic()
                         best_model_cfg = ((p, d, q), (P, D, Q, s))
                         best_regressors = current_regressors.copy()
 
@@ -85,7 +84,7 @@ def backward_modelling(df, periodicity):
                                 model_try = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_try_scaled, order=(p, d, q),
                                                     seasonal_order=(P, D, Q, s),
                                                     enforce_stationarity=True, enforce_invertibility=True)
-                                results_try = model_try.fit(disp=0, maxiter=100)
+                                results_try = model_try.fit(disp=0, maxiter=1000)
                                 aic_with_regressor_removed.append((results_try.aic, regressor))
                             except ConvergenceWarning:
                                 print(f"Failed to converge for model excluding {regressor}. Skipping...")
@@ -125,7 +124,7 @@ def model_testing(training_df, testing_df, best_model_cfg, best_regressors):
         # Model fitting
         model = SARIMAX(y_train.to_numpy(), exog=X_train_scaled.to_numpy(), order=arima_order, seasonal_order=s_order,
                         enforce_stationarity=True, enforce_invertibility=True)
-        fitted_model = model.fit(disp=0, maxiter=100)
+        fitted_model = model.fit(disp=0, maxiter=1000)
         print(f"model fit {i} times")
 
         # Model forecasting
@@ -146,8 +145,8 @@ def assessment_metrics(predictions, real_values):
     Performs the calculations of the statistics defined for performance assessment
     """
     mape_val = round(MAPE(real_values, predictions), 2)
-    mse_val = round(mean_squared_error(real_values, predictions), 2)
-    mae_val = round(mean_absolute_error(real_values, predictions), 2)
+    mse_val = round(MSE(real_values, predictions), 2)
+    mae_val = round(MAE(real_values, predictions), 2)
     rmse_val = round(RMSE(real_values, predictions), 2)
 
     return mape_val, mse_val, mae_val, rmse_val
@@ -237,12 +236,12 @@ def ts_models():
             continue
 
         # Runs the SARIMAX execution for the given project in biweekly format
-        #biweekly_statistics = arimax_model(df_path=os.path.join(biweekly_data_path, biweekly_files[i]),
-        #                                   project_name=project,
-        #                                   periodicity="biweekly")
+        biweekly_statistics = arimax_model(df_path=os.path.join(biweekly_data_path, biweekly_files[i]),
+                                           project_name=project,
+                                           periodicity="biweekly")
 
-        #biweekly_assessment.loc[len(biweekly_assessment)] = biweekly_statistics
-        #biweekly_assessment.to_csv(biweekly_results_path, index=False)
+        biweekly_assessment.loc[len(biweekly_assessment)] = biweekly_statistics
+        biweekly_assessment.to_csv(biweekly_results_path, index=False)
 
         monthly_statistics = arimax_model(df_path=os.path.join(monthly_data_path, monthly_files[i]),
                                           project_name=project,

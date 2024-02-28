@@ -8,7 +8,6 @@ import numpy as np
 from pmdarima import auto_arima
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from statsmodels.tsa.statespace.sarimax import SARIMAX
-from statsmodels.tsa.arima_model import ARIMA
 import json
 import statsmodels.api as sm
 from collections import deque
@@ -30,19 +29,25 @@ def regressor_forecast(df, vals_to_predict, periodicity, regressor_name, best_mo
 
     for i in range(vals_to_predict):
 
-        model = ARIMA(X_train, order=arima_order, seasonal_order=s_order, enforce_stationarity=True,
-                      enforce_invertibility=True)
-        fitted_model = model.fit(disp=0)
-        y_pred = fitted_model.forecast()
-        predictions.append(y_pred)
-        X_train.append(y_pred)
+        model = SARIMAX(X_train, order=arima_order, seasonal_order=s_order, enforce_stationarity=True,
+                        enforce_invertibility=True)
+        fitted_model = model.fit(disp=0, maxiter=1000, seasonal=True)
+        y_pred = fitted_model.get_forecast(steps=1)
+        predictions.append(y_pred.predicted_mean[0])
+        X_train.append(y_pred.predicted_mean[0])
+
+    print(f">>> Predictions made for regressor {regressor_name}")
 
     return predictions
 
 
 def ols_prediction(train_df, test_df, prediction_regressors):
     """
+    Performs linear regression prediction on the basis of the predicted values of the regressors with SARIMA modelling.
 
+    train_df - the training data
+    test_df - the test data
+    prediction_regressors - The variables to use in the prediction phase
     """
 
     # Assign the data to X and Y.
@@ -60,12 +65,12 @@ def ols_prediction(train_df, test_df, prediction_regressors):
     # Perform the walk forward optimization for one step ahead
     for i in range(len(test_df)):
 
-        est = model.predict(X_test[i, :])
-        predictions.append(est)
+        est = model.predict(X_test.iloc[i, :].values.reshape(1, -1))
+        predictions.append(est[0])
 
     mape_val, mse_val, mae_val, rmse_val = assessment_metrics(predictions=predictions, real_values=real_y_vals.tolist())
 
-    return [mape_val, mse_val, mae_val, rmse_val, model.aic, model.bic]
+    return [mape_val, mse_val, mae_val, rmse_val, model.aic(), model.bic()]
 
 
 def backward_modelling(df, periodicity, vals_to_predict):
@@ -74,7 +79,7 @@ def backward_modelling(df, periodicity, vals_to_predict):
     a JSON file
     """
     # Define the ranges for d and D since we are manually iterating over these
-    d_range = D_range = range(0, 3)
+    d_range = D_range = range(0, 4)
     if periodicity == "monthly":
         s = 12  # Seasonal period
     else:
@@ -82,6 +87,7 @@ def backward_modelling(df, periodicity, vals_to_predict):
 
     best_aic = np.inf
     best_model_cfg = None
+    best_regressors = None
 
     regressors = df.iloc[:, 2:].columns.tolist()
 
@@ -89,37 +95,52 @@ def backward_modelling(df, periodicity, vals_to_predict):
     regressor_dict = {}
 
     for regressor_name in regressors:
+
+        variable_array = df[regressor_name].astype(float)
         # Iterate over d and D values
-        for d in d_range:
-            for D in D_range:
+        for D in D_range:
+            for d in d_range:
                 # Use auto_arima to find the best p, q, P, Q given d and D
                 try:
-                    auto_arima_model = auto_arima(df[regressor_name], start_p=1, start_q=1,
-                                                  max_p=3, max_q=3, d=d, D=D, start_P=1, start_Q=1,
-                                                  max_P=3, max_Q=3, m=s, seasonal=True,
+                    auto_arima_model = auto_arima(variable_array, d=d, D=D, m=s, seasonal=True,
                                                   stepwise=True, suppress_warnings=True,
-                                                  error_action='ignore', trace=False)
+                                                  error_action='ignore', trace=False, maxiter=1000,
+                                                  information_criterion='aic')
 
                     # Extract the best ARIMA order and seasonal order found by auto_arima
                     p, q = auto_arima_model.order[0], auto_arima_model.order[2]
                     P, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[2]
-
+                    scored_aic = auto_arima_model.aic()
                     print(f"Best p, q combination: {p} {q} - Seasonal: {P} {Q}")
-                    print(f"d: {d}, D: {D}")
+                    print(f"d: {d}, D: {D}, aic: {round(scored_aic, 2)}")
 
-                    if auto_arima_model.aic < best_aic:
-                        best_aic = auto_arima_model.aic
+                    if scored_aic < best_aic:
+                        best_aic = auto_arima_model.aic()
                         best_model_cfg = ((p, d, q), (P, D, Q, s))
 
                 except Exception as e:
                     print(f"Error with configuration: {(d, D)} - {str(e)}")
                     continue
 
-        print(f"Best SARIMA{best_model_cfg} - AIC:{best_aic} for regressor {regressor_name}")
+        # Meaning that the long iterative process for obtaining the best hyperparameter combination, we compute simple
+        # auto_arima computation
+        if best_aic == np.inf:
+            auto_arima_model = auto_arima(df[regressor_name], m=s, seasonal=True,
+                                          stepwise=True, suppress_warnings=True,
+                                          error_action='ignore', trace=False)
+            p, q = auto_arima_model.order[0], auto_arima_model.order[2]
+            P, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[2]
+            best_aic = auto_arima_model.aic()
+            print(f"ATTENTION: Hyperparameter identification didn't work, running simple auto_arima...")
+            print(f"Best p, q combination: {p} {q} - Seasonal: {P} {Q}")
+            print(f"d: {d}, D: {D}")
 
+        print(f"Best SARIMA{best_model_cfg} - AIC:{best_aic} for regressor {regressor_name}")
+        
         # Forecasting the values of the regressors for the testing
         sarima_predictions = regressor_forecast(df=df, vals_to_predict=vals_to_predict, periodicity=periodicity,
                                                 regressor_name=regressor_name, best_model_cfg=best_model_cfg)
+
         # Store the predicted values for the regressors in the dict of predictions
         regressor_dict[regressor_name] = sarima_predictions
 
@@ -155,7 +176,8 @@ def relwork_model(df_path, project_name, periodicity):
     predicted_regressors = backward_modelling(df=training_df, periodicity=periodicity, vals_to_predict=len(testing_df))
 
     # LM prediction phase
-    predicted_y_vals = ols_prediction(train_df=training_df, test_df=testing_df, prediction_regressors=predicted_regressors)
+    predicted_y_vals = ols_prediction(train_df=training_df, test_df=testing_df,
+                                      prediction_regressors=predicted_regressors)
 
     # return the final output
     assessment_stats = deque(predicted_y_vals)
@@ -175,6 +197,8 @@ def related_models():
     output_path = os.path.join(DATA_PATH, "related_work_results")
     if not os.path.exists(output_path):
         os.mkdir(output_path)
+        os.mkdir(os.path.join(output_path, "monthly_results"))
+        os.mkdir(os.path.join(output_path, "biweekly_results"))
 
     # List existing data files:
     biweekly_files = os.listdir(biweekly_data_path)
@@ -187,29 +211,24 @@ def related_models():
     for i in range(len(biweekly_files)):
 
         project = biweekly_files[i][:-4]
-        relwork_results_path = os.path.join(DATA_PATH, "results", "related_work")
-        if not os.path.exists(relwork_results_path):
-            os.mkdir(relwork_results_path)
-            os.mkdir(os.path.join(relwork_results_path, "monthly_results"))
-            os.mkdir(os.path.join(relwork_results_path, "biweekly_results"))
-
-        monthly_results_path = os.path.join(relwork_results_path, "monthly_results", f"{project}.csv")
-        biweekly_results_path = os.path.join(relwork_results_path, "biweekly_results", f"{project}.csv")
+        monthly_results_path = os.path.join(output_path, "monthly_results", f"{project}.csv")
+        biweekly_results_path = os.path.join(output_path, "biweekly_results", f"{project}.csv")
 
         if os.path.exists(monthly_results_path) and os.path.exists(biweekly_results_path):
+            print(f"HEY! Project called {project} has been already processed")
             continue
 
         biweekly_statistics = relwork_model(df_path=os.path.join(biweekly_data_path, biweekly_files[i]),
-                                           project_name=project,
-                                           periodicity="biweekly")
+                                            project_name=project,
+                                            periodicity="biweekly")
 
         # Need to at results in the correct format to the DF
         biweekly_assessment.loc[len(biweekly_assessment)] = biweekly_statistics
         biweekly_assessment.to_csv(biweekly_results_path, index=False)
 
-        monthly_statistics = relwork_model(df_path=os.path.join(monthly_results_path, monthly_files[i]),
-                                          project_name=project,
-                                          periodicity="monthly")
+        monthly_statistics = relwork_model(df_path=os.path.join(monthly_data_path, monthly_files[i]),
+                                           project_name=project,
+                                           periodicity="monthly")
 
         monthly_assessment.loc[len(monthly_assessment)] = monthly_statistics
         monthly_assessment.to_csv(biweekly_results_path, index=False)
