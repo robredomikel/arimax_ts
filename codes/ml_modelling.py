@@ -1,4 +1,4 @@
-from modules import assessmentMetrics
+from modules import assessmentMetrics, check_encoding, change_encoding
 from commons import DATA_PATH, assessment_statistics
 
 import pandas as pd
@@ -26,19 +26,19 @@ def mlr_regression(training_df, testing_df, pro_name):
     print(f"> Multiple Linear Regression for project {pro_name}")
     predictions = []
 
-    X_train = training_df.iloc[:, 1:]
+    training_df = sm.add_constant(training_df)
+    testing_df = sm.add_constant(testing_df)
+    X_train = training_df.iloc[:, 1:]  # Explicitly adding the intercept of the Linear Regression
     y_train = training_df.iloc[:, 0]
-    X_test = testing_df.iloc[:, 1:]
+    X_test = testing_df.iloc[:, 1:]  # Explicitly adding the intercept of the Linear Regression
     y_test = testing_df.iloc[:, 0]
 
     for i in range(len(y_test)):
 
-        # Explicitly adding the intercept of the Linear Regression
-        X_train_constant = sm.add_constant(X_train)
-        model = sm.OLS(y_train, X_train_constant).fit()
+        model = sm.OLS(y_train, X_train).fit()
 
         # New observation for prediction
-        new_observation = sm.add_constant(X_test.iloc[i:i+1, :], has_constant='add')
+        new_observation = X_test.iloc[i:i+1, :]
         prediction = model.predict(new_observation)
         predictions.append(prediction.values[0])
 
@@ -327,22 +327,38 @@ def ml_models():
 
             project_name = biweekly_files[j][:-4]  # Removes the .csv extension from the project name
             # Removing extra index number and commit_date columns from the original dataset
-            biweekly_df = pd.read_csv(biweekly_files[j]).drop(columns=["COMMIT_DATE"])
-            monthly_df = pd.read_csv(monthly_files[j]).drop(columns=["COMMIT_DATE"])
-            complete_df = pd.read_csv(complete_files[j]).drop(columns=["COMMIT_DATE"])
 
+            bi_encoding = check_encoding(path=os.path.join(biweekly_data_path, biweekly_files[j]))
+            biweekly_df = (pd.read_csv(os.path.join(biweekly_data_path, biweekly_files[j]), encoding=bi_encoding)
+                           .drop(columns=["COMMIT_DATE"]))
+            mo_encoding = check_encoding(path=os.path.join(biweekly_data_path, biweekly_files[j]))
+            monthly_df = (pd.read_csv(os.path.join(monthly_data_path, monthly_files[j]), encoding=mo_encoding)
+                          .drop(columns=["COMMIT_DATE"]))
+
+            # Due to unknown reasons (the extraction was the same) the encoding is not 'ascii' but 'windows1252'
+            com_encoding = check_encoding(path=os.path.join(complete_data_path, complete_files[j]))
+
+            if com_encoding == "Windows-1252":
+                complete_df = change_encoding(path=os.path.join(complete_data_path, complete_files[j]))
+                new_header = complete_df.iloc[0].tolist()  # First row has the actual headers
+                complete_df = complete_df[1:]  # Consider only the dataframe from the first rows with values
+                complete_df.columns = new_header
+            else:
+                complete_df = pd.read_csv(os.path.join(complete_data_path, complete_files[j]), encoding=com_encoding)
+
+            complete_df = complete_df.drop(columns=["COMMIT_DATE"])
             # Splitting the data into train set (80%) and test set (20%)
-            biweekly_train_size = 0.8 * len(biweekly_df)
-            monthly_train_size = 0.8 * len(monthly_df)
-            complete_train_size = 0.8 * len(complete_df)
+            biweekly_train_size = round(0.8 * len(biweekly_df))
+            monthly_train_size = round(0.8 * len(monthly_df))
+            complete_train_size = round(0.8 * len(complete_df))
 
-            biweekly_train = biweekly_df.iloc[:biweekly_train_size]
-            monthly_train = monthly_df.iloc[:monthly_train_size]
-            complete_train = complete_df.iloc[:complete_train_size]
+            biweekly_train = biweekly_df.iloc[:biweekly_train_size, :]
+            monthly_train = monthly_df.iloc[:monthly_train_size, :]
+            complete_train = complete_df.iloc[:complete_train_size, :]
 
-            biweekly_test = biweekly_df.iloc[biweekly_train_size:]
-            monthly_test = monthly_df.iloc[monthly_train_size:]
-            complete_test = complete_df.iloc[complete_train_size:]
+            biweekly_test = biweekly_df.iloc[biweekly_train_size:, :]
+            monthly_test = monthly_df.iloc[monthly_train_size:, :]
+            complete_test = complete_df.iloc[complete_train_size:, :]
 
             # Model building & assessment
             biweekly_results = models[i](biweekly_train, biweekly_test, project_name)

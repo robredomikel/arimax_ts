@@ -12,7 +12,7 @@ import json
 import statsmodels.api as sm
 from collections import deque
 
-from modules import MAPE, RMSE
+from modules import check_encoding
 from commons import DATA_PATH
 from ts_modelling import assessment_metrics
 
@@ -70,7 +70,7 @@ def ols_prediction(train_df, test_df, prediction_regressors):
 
     mape_val, mse_val, mae_val, rmse_val = assessment_metrics(predictions=predictions, real_values=real_y_vals.tolist())
 
-    return [mape_val, mse_val, mae_val, rmse_val, model.aic(), model.bic()]
+    return [mape_val, mse_val, mae_val, rmse_val, model.aic, model.bic]
 
 
 def backward_modelling(df, periodicity, vals_to_predict):
@@ -85,9 +85,7 @@ def backward_modelling(df, periodicity, vals_to_predict):
     else:
         s = 26  # Bi-weekly periodicity
 
-    best_aic = np.inf
-    best_model_cfg = None
-    best_regressors = None
+
 
     regressors = df.iloc[:, 2:].columns.tolist()
 
@@ -96,7 +94,11 @@ def backward_modelling(df, periodicity, vals_to_predict):
 
     for regressor_name in regressors:
 
+        best_aic = np.inf
+        best_model_cfg = None
+        best_regressors = None
         variable_array = df[regressor_name].astype(float)
+
         # Iterate over d and D values
         for D in D_range:
             for d in d_range:
@@ -125,7 +127,7 @@ def backward_modelling(df, periodicity, vals_to_predict):
         # Meaning that the long iterative process for obtaining the best hyperparameter combination, we compute simple
         # auto_arima computation
         if best_aic == np.inf:
-            auto_arima_model = auto_arima(df[regressor_name], m=s, seasonal=True,
+            auto_arima_model = auto_arima(variable_array, m=s, seasonal=True,
                                           stepwise=True, suppress_warnings=True,
                                           error_action='ignore', trace=False)
             p, q = auto_arima_model.order[0], auto_arima_model.order[2]
@@ -136,7 +138,7 @@ def backward_modelling(df, periodicity, vals_to_predict):
             print(f"d: {d}, D: {D}")
 
         print(f"Best SARIMA{best_model_cfg} - AIC:{best_aic} for regressor {regressor_name}")
-        
+
         # Forecasting the values of the regressors for the testing
         sarima_predictions = regressor_forecast(df=df, vals_to_predict=vals_to_predict, periodicity=periodicity,
                                                 regressor_name=regressor_name, best_model_cfg=best_model_cfg)
@@ -160,8 +162,10 @@ def relwork_model(df_path, project_name, periodicity):
     """
 
     print(f"> Processing project {project_name}")
+
     # Read the dataframe
-    df = pd.read_csv(df_path)
+    encoding = check_encoding(df_path)
+    df = pd.read_csv(df_path, encoding=encoding)
     df.COMMIT_DATE = pd.to_datetime(df.COMMIT_DATE)
 
     # Dependent variable

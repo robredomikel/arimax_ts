@@ -11,7 +11,7 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 import json
 
 from commons import DATA_PATH
-from modules import MAPE, RMSE, MAE, MSE
+from modules import MAPE, RMSE, MAE, MSE, check_encoding
 
 
 def backward_modelling(df, periodicity):
@@ -163,7 +163,8 @@ def arimax_model(df_path, project_name, periodicity):
     """
 
     # DATA PREPARATION (Splitting)
-    df = pd.read_csv(df_path)
+    encoding = check_encoding(df_path)
+    df = pd.read_csv(df_path, encoding=encoding)
     df.COMMIT_DATE = pd.to_datetime(df.COMMIT_DATE)
     sqale_index = df.SQALE_INDEX.to_numpy()  # Dependent variable
     split_point = round(len(sqale_index)*0.8)  # Initial data splitting. (80% training 20% testing)

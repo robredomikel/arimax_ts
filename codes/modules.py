@@ -1,6 +1,35 @@
 import numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_error, log_loss
 import os
+import chardet
+from io import StringIO
+import pandas as pd
+
+
+def change_encoding(path):
+    """
+    Changes the encoding style of the df provided
+    """
+
+    with open(path, 'rb') as f:
+        content = f.read()  # Read the file in binary mode
+    f.close()
+    decoded_content = content.decode('windows-1252', errors='ignore')
+    complete_df = pd.read_csv(StringIO(decoded_content))
+    return complete_df
+
+
+def check_encoding(path):
+    """
+    Check the encoding style of the df provided:
+    """
+
+    with open(path, 'rb') as f:
+        result = chardet.detect(f.read())
+        encoding = result['encoding']
+    f.close()
+
+    return encoding
 
 
 def MAPE(predicted_vals, testing_vals):
