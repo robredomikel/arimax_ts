@@ -44,21 +44,23 @@ def backward_modelling(df, periodicity, seasonality):
     best_regressors = None
 
     # Iterate over d and D values
-    for D in d_range:
-        for d in D_range:
+    for D in D_range:
+        for d in d_range:
             # Use auto_arima to find the best p, q, P, Q given d and D
             print("##############################################################################")
             print(f"d: {d}, D: {D}")
             try:
                 if seasonality:
                     auto_arima_model = auto_arima(training_df['SQALE_INDEX'], d=d, D=D, m=s, seasonal=seasonality,
-                                              stepwise=True, suppress_warnings=True,
-                                              error_action='ignore', trace=False)
+                                                  stepwise=True, suppress_warnings=True,
+                                                  error_action='ignore', trace=False, maxiter=1000,
+                                                  information_criterion='aic')
                     P, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[2]
                 else:
                     auto_arima_model = auto_arima(training_df['SQALE_INDEX'], d=d, seasonal=seasonality,
                                                   stepwise=True, suppress_warnings=True,
-                                                  error_action='ignore', trace=False)
+                                                  error_action='ignore', trace=False, maxiter=1000,
+                                                  information_criterion='aic')
                     P, Q = np.nan
 
                 # Extract the best ARIMA order and seasonal order found by auto_arima
@@ -83,7 +85,7 @@ def backward_modelling(df, periodicity, seasonality):
 
                     print("Fitting model...")
                     results = model.fit(disp=0)
-                    if abs(results.aic()) < abs(best_aic):
+                    if results.aic() < best_aic:
                         best_aic = results.aic()
                         best_model_cfg = ((p, d, q), (P, D, Q, s))
                         best_regressors = current_regressors.copy()
@@ -121,7 +123,10 @@ def backward_modelling(df, periodicity, seasonality):
                 print(f"Error with configuration: {(d, D)} - {str(e)}")
                 continue
 
-    print(f"Best SARIMAX{best_model_cfg} - AIC:{best_aic} with regressors {best_regressors}")
+    if seasonality:
+        print(f"Best SARIMAX{best_model_cfg} - AIC:{best_aic} with regressors {best_regressors}")
+    else:
+        print(f"Best ARIMAX{best_model_cfg} - AIC:{best_aic} with regressors {best_regressors}")
     return best_model_cfg, round(best_aic, 2), best_regressors
 
 
