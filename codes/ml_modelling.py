@@ -13,7 +13,7 @@ import xgboost as xgb
 import statsmodels.api as sm
 
 
-def mlr_regression(training_df, testing_df, pro_name):
+def mlr_regression(training_df, testing_df, pro_name, periodicity):
     """
     Performs the Multiple Linear Regression on the provided project.
 
@@ -23,34 +23,46 @@ def mlr_regression(training_df, testing_df, pro_name):
     :return: Calls the assessment_metrics function with the obtained results
     """
 
-    print(f"> Multiple Linear Regression for project {pro_name}")
+    print(f"> Multiple Linear Regression for project {pro_name} - periodicity: [{periodicity}]")
     predictions = []
 
-    training_df = sm.add_constant(training_df)
-    testing_df = sm.add_constant(testing_df)
-    X_train = training_df.iloc[:, 1:]  # Explicitly adding the intercept of the Linear Regression
-    y_train = training_df.iloc[:, 0]
-    X_test = testing_df.iloc[:, 1:]  # Explicitly adding the intercept of the Linear Regression
-    y_test = testing_df.iloc[:, 0]
+    # preparing the data
+    X_train = training_df.iloc[:, 1:].to_numpy()  # Independent variable
+    y_train = training_df.iloc[:, 0].to_numpy()  # Dependent variable
+    X_test = testing_df.iloc[:, 1:].to_numpy()
+    y_test = testing_df.iloc[:, 0].to_numpy().astype(np.float64)
+
+    # Standardizing the data
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    # Convert the needed data from df to matrix format
+    constant_train = np.ones(shape=(len(X_train), 1))
+    # Explicitly adding the intercept of the Linear Regression
+    X_train = np.concatenate((constant_train, X_train_scaled), axis=1)
+    constant_test = np.ones(shape=(len(X_test), 1))
+    # Explicitly adding the intercept of the Linear Regression
+    X_test = np.concatenate((constant_test, X_test_scaled), axis=1)
 
     for i in range(len(y_test)):
 
         model = sm.OLS(y_train, X_train).fit()
 
         # New observation for prediction
-        new_observation = X_test.iloc[i:i+1, :]
+        new_observation = X_test[i:i+1, :]
         prediction = model.predict(new_observation)
-        predictions.append(prediction.values[0])
+        predictions.append(np.take(prediction, 0))
 
         # Update the training data
-        X_train = pd.concat([X_train, X_test.iloc[i:i+1, :]])
-        y_train = pd.concat([y_train, pd.Series(y_test.iloc[i])])
+        X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
+        y_train = np.append(y_train, y_test[i])  # Rows
 
-    print(f"> PROCESSED Multivariate Linear Regression for project {pro_name}")
+    print(f"> PROCESSED Multivariate Linear Regression for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(model='mlr', predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
-def svm_regression(training_df, testing_df, pro_name):
+def svm_regression(training_df, testing_df, pro_name, periodicity):
     """
     Performs the Support Vector Regression on the provided project.
     :param training_df:
@@ -58,16 +70,21 @@ def svm_regression(training_df, testing_df, pro_name):
     :param pro_name:
     :return: Calls the assessment_metrics function with the obtained results
     """
-    print(f"> Support Vector Machine Regression for project {pro_name}")
+    print(f"> Support Vector Machine Regression for project {pro_name} - periodicity: [{periodicity}]")
 
     # Empty array for the predictions
     predictions = []
 
     # Separating independent vars from dependent variable
-    X_train = training_df.iloc[:, 1:]  # Independent variable
-    y_train = training_df.iloc[:, 0]  # Dependent variable
-    X_test = testing_df.iloc[:, 1:]
-    y_test = testing_df.iloc[:, 0]
+    X_train = training_df.iloc[:, 1:].to_numpy()  # Independent variable
+    y_train = training_df.iloc[:, 0].to_numpy()  # Dependent variable
+    X_test = testing_df.iloc[:, 1:].to_numpy()
+    y_test = testing_df.iloc[:, 0].to_numpy()
+
+    # Standardizing the data
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
 
     for i in range(len(y_test)):
 
@@ -76,17 +93,20 @@ def svm_regression(training_df, testing_df, pro_name):
         model.fit(X_train, y_train)
 
         # Make prediction for the next observation
-        prediction = model.predict(X_test.iloc[i:i+1, :])
-        predictions.append(prediction[0])
+        # New observation for prediction
+        new_observation = X_test[i:i+1, :]
+        prediction = model.predict(new_observation)
+        predictions.append(np.take(prediction, 0))
 
-        X_train = pd.concat([X_train, X_test.iloc[i:i+1,:]])
-        y_train = pd.concat([y_train, pd.Series(y_test.iloc[i])])
+        # Update the training data
+        X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
+        y_train = np.append(y_train, y_test[i])  # Rows
 
-    print(f"> PROCESSED Support Vector Machine Regression for project {pro_name}")
+    print(f"> PROCESSED Support Vector Machine Regression for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(model="svr", predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
-def ridge_regression(training_df, testing_df, pro_name):
+def ridge_regression(training_df, testing_df, pro_name, periodicity):
     """
     Performs the L2 Ridge regression on the provided project.
 
@@ -95,37 +115,46 @@ def ridge_regression(training_df, testing_df, pro_name):
     :param pro_name:
     :return: Calls the assessment_metrics function with the obtained results
     """
-    print(f"> Ridge L2 Regression for project {pro_name}")
+    print(f"> Ridge L2 Regression for project {pro_name} - periodicity: [{periodicity}]")
 
     # preparing the data
-    X_train = training_df.iloc[:, 1:].values()  # Independent variable
-    y_train = training_df.iloc[:, 0].values()  # Dependent variable
-    X_test = testing_df.iloc[:, 1:].values()
-    y_test = testing_df.iloc[:, 0].values()
+    X_train = training_df.iloc[:, 1:].to_numpy()  # Independent variable
+    y_train = training_df.iloc[:, 0].to_numpy()  # Dependent variable
+    X_test = testing_df.iloc[:, 1:].to_numpy()
+    y_test = testing_df.iloc[:, 0].to_numpy().astype(np.float64)
 
     # Standardizing the data
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
+    # Convert the needed data from df to matrix format
+    constant_train = np.ones(shape=(len(X_train), 1))
+    # Explicitly adding the intercept of the Linear Regression
+    X_train = np.concatenate((constant_train, X_train_scaled), axis=1)
+    constant_test = np.ones(shape=(len(X_test), 1))
+    # Explicitly adding the intercept of the Linear Regression
+    X_test = np.concatenate((constant_test, X_test_scaled), axis=1)
+
     predictions = np.empty(len(X_test))
 
     for i in range(len(y_test)):
-        model = Ridge(alpha=1.0, normalize=False, max_iter=10000)
-        model.fit(X_train_scaled, y_train)
+        model = Ridge(alpha=1.0, max_iter=10000)
+        model.fit(X_train, y_train)
 
-        prediction = model.predict(X_test_scaled[i].reshape[1,-1])
-        predictions[i] = prediction
+        new_observation = X_test[i:i+1, :]
+        prediction = model.predict(new_observation)
+        predictions[i] = np.take(prediction, 0)
 
-        # Expanding the training dataset for next loop
-        X_train_scaled = np.vstack((X_train_scaled, X_test_scaled[i]))
-        y_train = np.append(y_train, y_test[i])
+        # Update the training data
+        X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
+        y_train = np.append(y_train, y_test[i])  # Rows
 
-    print(f"> PROCESSED L2 Ridge Regression for project {pro_name}")
+    print(f"> PROCESSED L2 Ridge Regression for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(model="L2", predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
-def lasso_regression(training_df, testing_df, pro_name):
+def lasso_regression(training_df, testing_df, pro_name, periodicity):
     """
     Performs the L1 Lasso regression on the provided project.
     :param training_df
@@ -133,37 +162,46 @@ def lasso_regression(training_df, testing_df, pro_name):
     :param pro_name
     :return: Calls the assessment_metrics function with the obtained results
     """
-    print(f"> Lasso L1 Regression for project {pro_name}")
+    print(f"> Lasso L1 Regression for project {pro_name} - periodicity: [{periodicity}]")
 
     # preparing the data
-    X_train = training_df.iloc[:, 1:].values()  # Independent variable
-    y_train = training_df.iloc[:, 0].values()  # Dependent variable
-    X_test = testing_df.iloc[:, 1:].values()
-    y_test = testing_df.iloc[:, 0].values()
+    X_train = training_df.iloc[:, 1:].to_numpy()  # Independent variable
+    y_train = training_df.iloc[:, 0].to_numpy()  # Dependent variable
+    X_test = testing_df.iloc[:, 1:].to_numpy()
+    y_test = testing_df.iloc[:, 0].to_numpy().astype(np.float64)
 
     # Standardizing the data
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
+    # Convert the needed data from df to matrix format
+    constant_train = np.ones(shape=(len(X_train), 1))
+    # Explicitly adding the intercept of the Linear Regression
+    X_train = np.concatenate((constant_train, X_train_scaled), axis=1)
+    constant_test = np.ones(shape=(len(X_test), 1))
+    # Explicitly adding the intercept of the Linear Regression
+    X_test = np.concatenate((constant_test, X_test_scaled), axis=1)
+
     predictions = np.empty(len(y_test))
 
     for i in range(len(X_test)):
-        model = Lasso(alpha=1.0, normalize=False, max_iter=10000)
-        model.fit(X_train_scaled, y_train)
+        model = Lasso(alpha=1.0, max_iter=10000)
+        model.fit(X_train, y_train)
 
-        prediction = model.predict(X_test_scaled[i].reshape[1,-1])
-        predictions[i] = prediction
+        new_observation = X_test[i:i+1, :]
+        prediction = model.predict(new_observation)
+        predictions[i] = np.take(prediction, 0)
 
-        # Expanding the training dataset for next loop
-        X_train_scaled = np.vstack((X_train_scaled, X_test_scaled[i]))
-        y_train = np.append(y_train, y_test[i])
+        # Update the training data
+        X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
+        y_train = np.append(y_train, y_test[i])  # Rows
 
-    print(f"> PROCESSED L1 Lasso Regression for project {pro_name}")
+    print(f"> PROCESSED L1 Lasso Regression for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(model="L1", predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
-def xgboost(training_df, testing_df, pro_name):
+def xgboost(training_df, testing_df, pro_name, periodicity):
     """
     Performs the XGBoost regression on the provided project.
     :param training_df:
@@ -172,17 +210,21 @@ def xgboost(training_df, testing_df, pro_name):
     :return: Calls the assessment_metrics function with the obtained results
     """
 
-    print(f"> XGBoost for project {pro_name}")
+    print(f"> XGBoost for project {pro_name} - periodicity: [{periodicity}]")
     predictions = []
-    X_train = training_df.iloc[:, 1:].values()
-    y_train = training_df.iloc[:, 0].values()
-    X_test = testing_df.iloc[:, 1:].values()
-    y_test = testing_df.iloc[:, 0].values()
+    X_train = training_df.iloc[:, 1:].to_numpy()
+    y_train = training_df.iloc[:, 0].to_numpy()
+    X_test = testing_df.iloc[:, 1:].to_numpy()
+    y_test = testing_df.iloc[:, 0].to_numpy()
+
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
 
     for i in range(len(y_test)):
         # Using DMatrix for train and test with xgb package.
         dtrain = xgb.DMatrix(X_train, label=y_train)
-        dtest = xgb.DMatrix(X_test[i].reshape(1, -1), label=y_test[i].reshape(-1))
+        dtest = xgb.DMatrix(X_test[i:i+1, :].tolist(), label=[y_test[i]])
 
         # Define model params
         params = {
@@ -196,18 +238,18 @@ def xgboost(training_df, testing_df, pro_name):
         watchlist = [(dtrain, "train"), (dtest, "test")]
         model = xgb.train(params, dtrain, num_boost_round=500, evals=watchlist, early_stopping_rounds=100, verbose_eval=False)
 
-        prediction = model.predict(dtest, ntree_limit=model.best_ntree_limit)
+        prediction = model.predict(dtest)
         predictions.append(prediction[0])
 
-        # Training data update
-        X_train = np.vstack((X_train, X_test[i]))
-        y_train = np.vstack((y_train, y_test[i]))
+        # Update the training data
+        X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
+        y_train = np.append(y_train, y_test[i])  # Rows
 
-    print(f"> PROCESSED XGBoost for project {pro_name}")
+    print(f"> PROCESSED XGBoost for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(model="xgb", predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
-def rf_forest(training_df, testing_df, pro_name):
+def rf_forest(training_df, testing_df, pro_name, periodicity):
     """
     Performs the Random Forest Regression on the provided project.
     :param training_df:
@@ -215,31 +257,38 @@ def rf_forest(training_df, testing_df, pro_name):
     :param pro_name:
     :return: Calls the assessment_metrics function with the obtained results
     """
-    print(f"> Random Forest Regression for project {pro_name}")
+    print(f"> Random Forest Regression for project {pro_name} - periodicity: [{periodicity}]")
 
     predictions = []
     # Separating independent vars from dependent variable
-    X_train = training_df.iloc[:, 1:]  # Independent variable
-    y_train = training_df.iloc[:, 0]  # Dependent variable
-    X_test = testing_df.iloc[:, 1:]
-    y_test = testing_df.iloc[:, 0]
+    X_train = training_df.iloc[:, 1:].to_numpy()  # Independent variable
+    y_train = training_df.iloc[:, 0].to_numpy()  # Dependent variable
+    X_test = testing_df.iloc[:, 1:].to_numpy()
+    y_test = testing_df.iloc[:, 0].to_numpy()
+
+    # Standardizing the data
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
 
     for i in range(len(y_test)):
 
         model = RandomForestRegressor(n_estimators=100, random_state=None, n_jobs=-1, bootstrap=False)
         model.fit(X_train, y_train)
 
-        prediction = model.predict(X_test.iloc[i:i+1, :])
-        predictions.append(prediction[0])
+        new_observation = X_test[i:i+1, :]
+        prediction = model.predict(new_observation)
+        predictions.append(np.take(prediction, 0))
 
-        X_train = pd.concat([X_train, X_test.iloc[i:i+1, :]])
-        y_train = pd.concat([y_train, pd.Series(y_test.iloc[i])])
+        # Update the training data
+        X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
+        y_train = np.append(y_train, y_test[i])  # Rows
 
-    print(f"> PROCESSED Random Forest Regression for project {pro_name}")
+    print(f"> PROCESSED Random Forest Regression for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(model="rf", predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
-def sgd_regression(training_df, testing_df, pro_name):
+def sgd_regression(training_df, testing_df, pro_name, periodicity):
     """
      Performs the Stochastic Gradient Descent Regression on the provided project.
     :param training_df:
@@ -248,31 +297,41 @@ def sgd_regression(training_df, testing_df, pro_name):
     :return: Calls the assessment_metrics function with the obtained results
     """
 
-    print(f"> Stochastic Gradient Descent for project {pro_name}")
+    print(f"> Stochastic Gradient Descent for project {pro_name} - periodicity: [{periodicity}]")
     predictions = []
-    scaler = StandardScaler()
 
     # Vectorized format for model features.
-    X_train = training_df.iloc[:, 1:].values()
-    y_train = training_df.iloc[:, 0].values()
-    X_test = testing_df.iloc[:, 1:].values()
-    y_test = testing_df.iloc[:, 0].values()
+    X_train = training_df.iloc[:, 1:].to_numpy()  # Independent variable
+    y_train = training_df.iloc[:, 0].to_numpy()  # Dependent variable
+    X_test = testing_df.iloc[:, 1:].to_numpy()
+    y_test = testing_df.iloc[:, 0].to_numpy().astype(np.float64)
 
-    # Scaling features
+    # Standardizing the data
+    scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
+    # Convert the needed data from df to matrix format
+    constant_train = np.ones(shape=(len(X_train), 1))
+    # Explicitly adding the intercept of the Linear Regression
+    X_train = np.concatenate((constant_train, X_train_scaled), axis=1)
+    constant_test = np.ones(shape=(len(X_test), 1))
+    # Explicitly adding the intercept of the Linear Regression
+    X_test = np.concatenate((constant_test, X_test_scaled), axis=1)
+
     for i in range(len(y_test)):
         model = SGDRegressor(max_iter=1000, tol=0.0001)
-        model.fit(X_train_scaled, y_train)
+        model.fit(X_train, y_train)
 
-        prediction = model.predict(X_test_scaled[i].reshape(1, -1))
-        predictions.append(prediction[0])
+        new_observation = X_test[i:i+1, :]
+        prediction = model.predict(new_observation)
+        predictions.append(np.take(prediction, 0))
 
-        X_train_scaled = np.vstack((X_train_scaled, X_test_scaled[i]))
-        y_train = np.append(y_train, y_test[i])
+        # Update the training data
+        X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
+        y_train = np.append(y_train, y_test[i])  # Rows
 
-    print(f"> PROCESSED Stochastic Gradient Descent for project {pro_name}")
+    print(f"> PROCESSED Stochastic Gradient Descent for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(model="sgd", predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
@@ -299,10 +358,10 @@ def ml_models():
     complete_files = os.listdir(complete_data_path)
 
     ml_model_names = ["mlr", "svr", "L1", "L2", "xgb", "rf", "sgd"]
-    periodicity_levels = ["monthly", "biweekly", "complete"]
     models = [mlr_regression, svm_regression, ridge_regression, lasso_regression, xgboost, rf_forest, sgd_regression]
 
     for i in range(len(models)):
+
         model_results_path = os.path.join(ml_results_path, ml_model_names[i])
         if os.path.exists(model_results_path):
             print("Results for ML model {} already processed".format(ml_model_names[i]))
@@ -361,20 +420,26 @@ def ml_models():
             complete_test = complete_df.iloc[complete_train_size:, :]
 
             # Model building & assessment
-            biweekly_results = models[i](biweekly_train, biweekly_test, project_name)
-            monthly_results = models[i](monthly_train, monthly_test, project_name)
-            complete_results = models[i](complete_train, complete_test, project_name)
+            biweekly_results = models[i](biweekly_train, biweekly_test, project_name, 'biweekly')
+            monthly_results = models[i](monthly_train, monthly_test, project_name, 'monthly')
+            complete_results = models[i](complete_train, complete_test, project_name, 'complete')
 
             # Updating biweekly results
-            biweekly_assessment_df[j, :] = biweekly_results
+            biweekly_assessment_df = pd.concat([biweekly_assessment_df, biweekly_results], axis=0)
             # Updating monthly results
-            monthly_assessment_df[j, :] = monthly_results
+            monthly_assessment_df = pd.concat([monthly_assessment_df, monthly_results], axis=0)
             # updating complete results
-            complete_assessment_df[j, :] = complete_results
+            complete_assessment_df = pd.concat([complete_assessment_df, complete_results], axis=0)
 
-            print(f"> <{ml_model_names[i]}> ML modelling for project <{project_name}> performed - {j+1}/{len(biweekly_files)} projects - {i+1} of {len(models)}")
+            print(f"> <{ml_model_names[i]}> ML modelling for project <{project_name}> performed - {j+1}/{len(biweekly_files)} projects - {i+1} of {len(models)} models")
 
-        # Saving the results per periods in csv
-        biweekly_assessment_df.to_csv(biweekly_path, index=False)
-        monthly_assessment_df.to_csv(monthly_path, index=False)
-        complete_assessment_df.to_csv(complete_path, index=False)
+            # Saving the results per periods in csv
+            biweekly_file_path = os.path.join(biweekly_path, f"{biweekly_files[j]}")
+            monthly_file_path = os.path.join(monthly_path, f"{biweekly_files[j]}")
+            complete_file_path = os.path.join(complete_path, f"{biweekly_files[j]}")
+
+            biweekly_assessment_df.to_csv(biweekly_file_path, index=False)
+            monthly_assessment_df.to_csv(monthly_file_path, index=False)
+            complete_assessment_df.to_csv(complete_file_path, index=False)
+
+    print("> ML MODELLING STAGE COMPLETED!")

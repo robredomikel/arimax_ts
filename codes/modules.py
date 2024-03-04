@@ -6,6 +6,16 @@ from io import StringIO
 import pandas as pd
 
 
+def format_results(result_list):
+    """
+    Makes the results fit the required format in pandas. Goes from list to dict
+    """
+
+    new_row = pd.DataFrame([{"PROJECT": result_list[0], "MAPE": result_list[1], "MSE": result_list[2],
+                             "MAE": result_list[3], "RMSE": result_list[4]}])
+    return new_row
+
+
 def change_encoding(path):
     """
     Changes the encoding style of the df provided
@@ -67,9 +77,8 @@ def assessmentMetrics(model, predicted_vals, testing_vals, pro_name):
     mse_val = mean_squared_error(testing_vals, predicted_vals)
     mae_val = mean_absolute_error(testing_vals, predicted_vals)
     rmse_val = RMSE(testing_vals=testing_vals, predicted_vals=predicted_vals)
-    logLogs_val = log_loss(testing_vals, predicted_vals)
 
-    return model, mape_val, mse_val, mae_val, rmse_val, logLogs_val
+    return format_results([model, mape_val, mse_val, mae_val, rmse_val])
 
 
 
