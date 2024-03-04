@@ -228,7 +228,7 @@ def related_models(seasonality):
     """
     Executes the tsa process with the related work models
     """
-    if seasonality == True:
+    if seasonality:
         output_directory = "sarima_lm_results"
     else:
         output_directory = "arima_lm_results"

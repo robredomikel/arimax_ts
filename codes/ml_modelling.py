@@ -431,7 +431,8 @@ def ml_models():
             # updating complete results
             complete_assessment_df = pd.concat([complete_assessment_df, complete_results], axis=0)
 
-            print(f"> <{ml_model_names[i]}> ML modelling for project <{project_name}> performed - {j+1}/{len(biweekly_files)} projects - {i+1} of {len(models)} models")
+            print(f"> <{ml_model_names[i]}> ML modelling for project <{project_name}> performed - "
+                  f"{j+1}/{len(biweekly_files)} projects - {i+1} of {len(models)} models")
 
             # Saving the results per periods in csv
             biweekly_file_path = os.path.join(biweekly_path, f"{biweekly_files[j]}")
