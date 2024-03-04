@@ -14,7 +14,7 @@ from commons import DATA_PATH
 from modules import MAPE, RMSE, MAE, MSE, check_encoding
 
 
-def backward_modelling(df, periodicity):
+def backward_modelling(df, periodicity, seasonality):
     """
     Finds the best modelling order for the SARIMAX model and stores its' parameters, AIC value and useful regressors in
     a JSON file
@@ -28,7 +28,12 @@ def backward_modelling(df, periodicity):
     testing_df = df.iloc[split_point:, :]
 
     # Define the ranges for d and D since we are manually iterating over these
-    d_range = D_range = range(0, 4)
+    if seasonality:
+        d_range = D_range = range(0, 4)
+    else:
+        d_range = range(0, 4)
+        D_range = [0]  # We don't look into seasonal component
+
     if periodicity == "monthly":
         s = 12  # Seasonal period
     else:
@@ -45,13 +50,19 @@ def backward_modelling(df, periodicity):
             print("##############################################################################")
             print(f"d: {d}, D: {D}")
             try:
-                auto_arima_model = auto_arima(training_df['SQALE_INDEX'], d=d, D=D, m=s, seasonal=True,
+                if seasonality:
+                    auto_arima_model = auto_arima(training_df['SQALE_INDEX'], d=d, D=D, m=s, seasonal=seasonality,
                                               stepwise=True, suppress_warnings=True,
                                               error_action='ignore', trace=False)
+                    P, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[2]
+                else:
+                    auto_arima_model = auto_arima(training_df['SQALE_INDEX'], d=d, seasonal=seasonality,
+                                                  stepwise=True, suppress_warnings=True,
+                                                  error_action='ignore', trace=False)
+                    P, Q = np.nan
 
                 # Extract the best ARIMA order and seasonal order found by auto_arima
                 p, q = auto_arima_model.order[0], auto_arima_model.order[2]
-                P, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[2]
 
                 print(f"Best p, q combination: {p} {q} - Seasonal: {P} {Q}")
                 print(f"d: {d}, D: {D}")
@@ -62,9 +73,14 @@ def backward_modelling(df, periodicity):
                     tmp_X = training_df[current_regressors]
                     tmp_X_scaled = np.log1p(tmp_X)
                     print(current_regressors)
-                    model = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_scaled, order=(p, d, q),
+                    if seasonality:
+                        model = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_scaled, order=(p, d, q),
                                     seasonal_order=(P, D, Q, s),
                                     enforce_stationarity=True, enforce_invertibility=True)
+                    else:
+                        model = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_scaled, order=(p, d, q),
+                                        enforce_stationarity=True, enforce_invertibility=True)
+
                     print("Fitting model...")
                     results = model.fit(disp=0)
                     if abs(results.aic()) < abs(best_aic):
@@ -81,9 +97,14 @@ def backward_modelling(df, periodicity):
                             tmp_X_try_scaled = np.log1p(tmp_X_try)
 
                             try:
-                                model_try = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_try_scaled, order=(p, d, q),
+                                if seasonality:
+                                    model_try = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_try_scaled, order=(p, d, q),
                                                     seasonal_order=(P, D, Q, s),
                                                     enforce_stationarity=True, enforce_invertibility=True)
+                                else:
+                                    model_try = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_try_scaled, order=(p, d, q),                                                        seasonal_order=(P, D, Q, s),
+                                                        enforce_stationarity=True, enforce_invertibility=True)
+
                                 results_try = model_try.fit(disp=0, maxiter=1000)
                                 aic_with_regressor_removed.append((results_try.aic, regressor))
                             except ConvergenceWarning:
@@ -104,7 +125,7 @@ def backward_modelling(df, periodicity):
     return best_model_cfg, round(best_aic, 2), best_regressors
 
 
-def model_testing(training_df, testing_df, best_model_cfg, best_regressors):
+def model_testing(training_df, testing_df, best_model_cfg, best_regressors, seasonality):
     """
     Given the best model order parameters obtained from the backward variable selection and aut_arima tuning we
     fit the SARIMAX model for forecasting
@@ -122,8 +143,13 @@ def model_testing(training_df, testing_df, best_model_cfg, best_regressors):
         X_train_scaled = X_train.map(np.log1p)
 
         # Model fitting
-        model = SARIMAX(y_train.to_numpy(), exog=X_train_scaled.to_numpy(), order=arima_order, seasonal_order=s_order,
-                        enforce_stationarity=True, enforce_invertibility=True)
+        if seasonality:
+            model = SARIMAX(y_train.to_numpy(), exog=X_train_scaled.to_numpy(), order=arima_order,
+                            seasonal_order=s_order, enforce_stationarity=True, enforce_invertibility=True)
+        else:
+            model = SARIMAX(y_train.to_numpy(), exog=X_train_scaled.to_numpy(), order=arima_order,
+                            enforce_stationarity=True, enforce_invertibility=True)
+
         fitted_model = model.fit(disp=0, maxiter=1000)
         print(f"model fit {i} times")
 
@@ -152,7 +178,7 @@ def assessment_metrics(predictions, real_values):
     return mape_val, mse_val, mae_val, rmse_val
 
 
-def arimax_model(df_path, project_name, periodicity):
+def arimax_model(df_path, project_name, periodicity, seasonality):
     """
     Performs the modelling of the ARIMAX model.
 
@@ -172,17 +198,25 @@ def arimax_model(df_path, project_name, periodicity):
     testing_df = df.iloc[split_point:, :]
 
     # SARIMAX backward modelling
-    best_model_params, best_aic, best_regressors = backward_modelling(df=training_df, periodicity=periodicity)
+    best_model_params, best_aic, best_regressors = backward_modelling(df=training_df, periodicity=periodicity,
+                                                                      seasonality=seasonality)
     # best_model_params = (1, 0, 1), (2, 3, 0, 26)
     # best_aic = -144.89
     # best_regressors = ['S1213', 'RedundantThrowsDeclarationCheck', 'S00122', 'S1488', 'DuplicatedBlocks', 'S1155', 'S1151', 'S1132']
 
     # Store the obtained results in json:
-    best_model_path = os.path.join(DATA_PATH, "best_sarimax_models")
-    if not os.path.exists(best_model_path):
-        os.mkdir(best_model_path)
-        os.mkdir(os.path.join(best_model_path, "biweekly"))
-        os.mkdir(os.path.join(best_model_path, "monthly"))
+    if seasonality:
+        best_model_path = os.path.join(DATA_PATH, "best_sarimax_models")
+        if not os.path.exists(best_model_path):
+            os.mkdir(best_model_path)
+            os.mkdir(os.path.join(best_model_path, "biweekly"))
+            os.mkdir(os.path.join(best_model_path, "monthly"))
+    else:
+        best_model_path = os.path.join(DATA_PATH, "best_arimax_models")
+        if not os.path.exists(best_model_path):
+            os.mkdir(best_model_path)
+            os.mkdir(os.path.join(best_model_path, "biweekly"))
+            os.mkdir(os.path.join(best_model_path, "monthly"))
 
     # Stores the results in a json file
     json_dict = {'model_params': best_model_params, 'best_aic': best_aic, "best_regressors": best_regressors}
@@ -192,7 +226,8 @@ def arimax_model(df_path, project_name, periodicity):
 
     # Model testing
     predictions, aic_val, bic_val = model_testing(training_df=training_df, testing_df=testing_df,
-                                                  best_model_cfg=best_model_params, best_regressors=best_regressors)
+                                                  best_model_cfg=best_model_params, best_regressors=best_regressors,
+                                                  seasonality=seasonality)
 
     assessment_vals = assessment_metrics(predictions=predictions, real_values=testing_df["SQALE_INDEX"].tolist())
 
@@ -205,14 +240,19 @@ def arimax_model(df_path, project_name, periodicity):
             aic_val, bic_val]
 
 
-def ts_models():
+def ts_models(seasonality):
     """
     Executes the tsa process
     """
 
+    if seasonality == True:
+        output_directory = "sarimax_results"
+    else:
+        output_directory = "arimax_results"
+
     biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data")
     monthly_data_path = os.path.join(DATA_PATH, "monthly_data")
-    output_path = os.path.join(DATA_PATH, "sarimax_results")
+    output_path = os.path.join(DATA_PATH, output_directory)
     if not os.path.exists(output_path):
         os.mkdir(output_path)
         os.mkdir(os.path.join(output_path, "monthly_results"))
@@ -239,18 +279,26 @@ def ts_models():
         # Runs the SARIMAX execution for the given project in biweekly format
         biweekly_statistics = arimax_model(df_path=os.path.join(biweekly_data_path, biweekly_files[i]),
                                            project_name=project,
-                                           periodicity="biweekly")
+                                           periodicity="biweekly",
+                                           seasonality=seasonality)
 
         biweekly_assessment.loc[len(biweekly_assessment)] = biweekly_statistics
         biweekly_assessment.to_csv(biweekly_results_path, index=False)
 
         monthly_statistics = arimax_model(df_path=os.path.join(monthly_data_path, monthly_files[i]),
                                           project_name=project,
-                                          periodicity="monthly")
+                                          periodicity="monthly",
+                                          seasonality=seasonality)
 
         monthly_assessment.loc[len(monthly_assessment)] = monthly_statistics
         monthly_assessment.to_csv(monthly_results_path, index=False)
 
-        print(f"> sarimax modelling for project <{project}> performed - {i+1}/{len(biweekly_files)}")
+        if seasonality:
+            print(f"> SARIMAX modelling for project <{project}> performed - {i+1}/{len(biweekly_files)}")
+        else:
+            print(f"> ARIMAX modelling for project <{project}> performed - {i+1}/{len(biweekly_files)}")
 
-    print("SARIMAX stage performed!")
+    if seasonality:
+        print("> SARIMAX stage performed!")
+    else:
+        print("> ARIMAX stage performed!")
