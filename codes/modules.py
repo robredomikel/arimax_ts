@@ -6,6 +6,37 @@ from io import StringIO
 import pandas as pd
 
 
+def detect_existing_output(project, paths, flag_num, files_num, approach):
+
+    monthly_results_path = paths[0]
+    biweekly_results_path = paths[1]
+    if len(paths) == 3:  # Means the call comes from the ML modelling stage.
+        complete_results_path = paths[2]
+        # Check if the project has already been processed
+        if (os.path.exists(monthly_results_path) and os.path.exists(biweekly_results_path) and
+                os.path.exists(complete_results_path)):
+            print(f"> PROJECT: {project} has already been processed - NEXT {flag_num+1}/{len(files_num)}")
+            return True
+        else:
+            print(f"> Processing project {project} for {approach} approach.")
+            return False
+
+    else:
+        # Check if the project has already been processed
+        if os.path.exists(monthly_results_path) and os.path.exists(biweekly_results_path):
+            print(f"> PROJECT: {project} has already been processed - NEXT {flag_num+1}/{len(files_num)}")
+            return True
+        else:
+            if os.path.exists(monthly_results_path):
+                print(f"> Only monthy analysis processed for PROJECT: {project}")
+            elif os.path.exists(biweekly_results_path):
+                print(f"> Only biweekly analysis processed for PROJECT: {project}")
+            else:
+                print(f"> Processing project {project} for {approach} approach.")
+
+            return False
+
+
 def format_results(result_list):
     """
     Makes the results fit the required format in pandas. Goes from list to dict
