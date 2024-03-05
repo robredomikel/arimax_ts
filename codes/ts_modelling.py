@@ -11,7 +11,7 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 import json
 
 from commons import DATA_PATH
-from modules import MAPE, RMSE, MAE, MSE, check_encoding
+from modules import MAPE, RMSE, MAE, MSE, check_encoding, detect_existing_output
 
 
 def backward_modelling(df, periodicity, seasonality):
@@ -250,6 +250,7 @@ def ts_models(seasonality):
     Executes the tsa process
     """
 
+    # Check if Seasonality is taken into consideration
     if seasonality == True:
         output_directory = "sarimax_results"
     else:
@@ -277,8 +278,9 @@ def ts_models(seasonality):
         monthly_results_path = os.path.join(output_path, "monthly_results", f"{project}.csv")
         biweekly_results_path = os.path.join(output_path, "biweekly_results", f"{project}.csv")
 
-        if os.path.exists(monthly_results_path) and os.path.exists(biweekly_results_path):
-            print(f"HEY! Project called {project} has been already processed")
+        # Check if the project has already been processed
+        if detect_existing_output(project=project, paths=[monthly_results_path, biweekly_results_path],
+                                  flag_num=i, files_num=len(biweekly_files), approach=f"{seasonality}-ARIMAX"):
             continue
 
         # Runs the SARIMAX execution for the given project in biweekly format

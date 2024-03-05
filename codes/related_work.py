@@ -12,7 +12,7 @@ import json
 import statsmodels.api as sm
 from collections import deque
 
-from modules import check_encoding
+from modules import check_encoding, detect_existing_output
 from commons import DATA_PATH
 from ts_modelling import assessment_metrics
 
@@ -255,8 +255,8 @@ def related_models(seasonality):
         monthly_results_path = os.path.join(output_path, "monthly_results", f"{project}.csv")
         biweekly_results_path = os.path.join(output_path, "biweekly_results", f"{project}.csv")
 
-        if os.path.exists(monthly_results_path) and os.path.exists(biweekly_results_path):
-            print(f"HEY! Project called {project} has been already processed")
+        if detect_existing_output(project=project, paths=[monthly_results_path, biweekly_results_path],
+                                  flag_num=i, files_num=len(biweekly_files), approach=f"{seasonality}-ARIMA+LM"):
             continue
 
         biweekly_statistics = relwork_model(df_path=os.path.join(biweekly_data_path, biweekly_files[i]),

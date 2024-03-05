@@ -1,4 +1,4 @@
-from modules import assessmentMetrics, check_encoding, change_encoding
+from modules import assessmentMetrics, check_encoding, change_encoding, detect_existing_output
 from commons import DATA_PATH, assessment_statistics
 
 import pandas as pd
@@ -363,9 +363,6 @@ def ml_models():
     for i in range(len(models)):
 
         model_results_path = os.path.join(ml_results_path, ml_model_names[i])
-        if os.path.exists(model_results_path):
-            print("Results for ML model {} already processed".format(ml_model_names[i]))
-            continue
 
         # Creation of nidek results direcotry
         os.mkdir(model_results_path)
@@ -373,9 +370,13 @@ def ml_models():
         biweekly_path = os.path.join(ml_results_path, f"{ml_model_names[i]}/biweekly")
         complete_path = os.path.join(ml_results_path, f"{ml_model_names[i]}/complete")
 
-        os.mkdir(monthly_path)
-        os.mkdir(biweekly_path)
-        os.mkdir(complete_path)
+        # Checks if the directories for the given models and periodicity levels has already been implemented.
+        if not os.path.exists(monthly_path):
+            os.mkdir(monthly_path)
+        elif not os.path.exists(biweekly_path):
+              os.mkdir(biweekly_path)
+        elif not os.path.exists(complete_path):
+            os.mkdir(complete_path)
 
         # Creation of the dataframe to hold the model assessment results
         monthly_assessment_df = pd.DataFrame(columns=assessment_statistics)
@@ -386,6 +387,11 @@ def ml_models():
 
             project_name = biweekly_files[j][:-4]  # Removes the .csv extension from the project name
             # Removing extra index number and commit_date columns from the original dataset
+
+            # Check if the results have already been accomplished
+            if detect_existing_output(project=project_name, paths=[monthly_path, biweekly_path, complete_path],
+                                      flag_num=j, files_num=len(biweekly_files), approach="ML modelling"):
+                continue
 
             bi_encoding = check_encoding(path=os.path.join(biweekly_data_path, biweekly_files[j]))
             biweekly_df = (pd.read_csv(os.path.join(biweekly_data_path, biweekly_files[j]), encoding=bi_encoding)
