@@ -5,6 +5,8 @@ import chardet
 from io import StringIO
 import pandas as pd
 
+from commons import DATA_PATH
+
 
 def detect_existing_output(project, paths, flag_num, files_num, approach):
 
@@ -110,6 +112,22 @@ def assessmentMetrics(model, predicted_vals, testing_vals, pro_name):
     rmse_val = RMSE(testing_vals=testing_vals, predicted_vals=predicted_vals)
 
     return format_results([model, mape_val, mse_val, mae_val, rmse_val])
+
+
+def transform_to_latex(df_path):
+    """
+    Transforms the pandas dataframe to latex
+    """
+
+    df = pd.read_csv(df_path)
+    latex_df = df.to_latex(index=False)
+    results_type = df_path.split('/')[-1][:-4]
+    file_tex = results_type + '.tex'
+    file_path = os.path.join(DATA_PATH, file_tex)
+    with open(file_path, 'w') as f:
+        f.write(latex_df)
+    f.close()
+    print(f"{results_type} RESULTS table saved into LaTex format!")
 
 
 
