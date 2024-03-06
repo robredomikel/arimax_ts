@@ -17,7 +17,7 @@ def detect_existing_output(project, paths, flag_num, files_num, approach):
         # Check if the project has already been processed
         if (os.path.exists(monthly_results_path) and os.path.exists(biweekly_results_path) and
                 os.path.exists(complete_results_path)):
-            print(f"> PROJECT: {project} has already been processed - NEXT {flag_num+1}/{len(files_num)}")
+            print(f"> PROJECT: {project} has already been processed - NEXT {flag_num+1}/{files_num}")
             return True
         else:
             print(f"> Processing project {project} for {approach} approach.")
@@ -26,7 +26,7 @@ def detect_existing_output(project, paths, flag_num, files_num, approach):
     else:
         # Check if the project has already been processed
         if os.path.exists(monthly_results_path) and os.path.exists(biweekly_results_path):
-            print(f"> PROJECT: {project} has already been processed - NEXT {flag_num+1}/{len(files_num)}")
+            print(f"> PROJECT: {project} has already been processed - NEXT {flag_num+1}/{files_num}")
             return True
         else:
             if os.path.exists(monthly_results_path):
@@ -95,7 +95,7 @@ def RMSE(predicted_vals, testing_vals):
     return np.sqrt(MSE(y_true, y_pred))
 
 
-def assessmentMetrics(model, predicted_vals, testing_vals, pro_name):
+def assessmentMetrics(predicted_vals, testing_vals, pro_name):
     """
 
     Calculates MAPE, MSE, MAE, RMSE & LogLoss
@@ -111,7 +111,7 @@ def assessmentMetrics(model, predicted_vals, testing_vals, pro_name):
     mae_val = mean_absolute_error(testing_vals, predicted_vals)
     rmse_val = RMSE(testing_vals=testing_vals, predicted_vals=predicted_vals)
 
-    return format_results([model, mape_val, mse_val, mae_val, rmse_val])
+    return format_results([pro_name, mape_val, mse_val, mae_val, rmse_val])
 
 
 def transform_to_latex(df_path):

@@ -77,16 +77,16 @@ def backward_modelling(df, periodicity, seasonality):
                     print(current_regressors)
                     if seasonality:
                         model = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_scaled, order=(p, d, q),
-                                    seasonal_order=(P, D, Q, s),
-                                    enforce_stationarity=True, enforce_invertibility=True)
+                                        seasonal_order=(P, D, Q, s),
+                                        enforce_stationarity=True, enforce_invertibility=True)
                     else:
                         model = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_scaled, order=(p, d, q),
                                         enforce_stationarity=True, enforce_invertibility=True)
 
                     print("Fitting model...")
                     results = model.fit(disp=0)
-                    if results.aic() < best_aic:
-                        best_aic = results.aic()
+                    if results.aic < best_aic:
+                        best_aic = results.aic
                         best_model_cfg = ((p, d, q), (P, D, Q, s))
                         best_regressors = current_regressors.copy()
 
@@ -101,8 +101,8 @@ def backward_modelling(df, periodicity, seasonality):
                             try:
                                 if seasonality:
                                     model_try = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_try_scaled, order=(p, d, q),
-                                                    seasonal_order=(P, D, Q, s),
-                                                    enforce_stationarity=True, enforce_invertibility=True)
+                                                        seasonal_order=(P, D, Q, s),
+                                                        enforce_stationarity=True, enforce_invertibility=True)
                                 else:
                                     model_try = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_try_scaled, order=(p, d, q),                                                        seasonal_order=(P, D, Q, s),
                                                         enforce_stationarity=True, enforce_invertibility=True)

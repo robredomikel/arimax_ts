@@ -59,7 +59,7 @@ def mlr_regression(training_df, testing_df, pro_name, periodicity):
         y_train = np.append(y_train, y_test[i])  # Rows
 
     print(f"> PROCESSED Multivariate Linear Regression for project {pro_name} - periodicity: [{periodicity}]")
-    return assessmentMetrics(model='mlr', predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
+    return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
 def svm_regression(training_df, testing_df, pro_name, periodicity):
@@ -103,7 +103,7 @@ def svm_regression(training_df, testing_df, pro_name, periodicity):
         y_train = np.append(y_train, y_test[i])  # Rows
 
     print(f"> PROCESSED Support Vector Machine Regression for project {pro_name} - periodicity: [{periodicity}]")
-    return assessmentMetrics(model="svr", predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
+    return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
 def ridge_regression(training_df, testing_df, pro_name, periodicity):
@@ -151,7 +151,7 @@ def ridge_regression(training_df, testing_df, pro_name, periodicity):
         y_train = np.append(y_train, y_test[i])  # Rows
 
     print(f"> PROCESSED L2 Ridge Regression for project {pro_name} - periodicity: [{periodicity}]")
-    return assessmentMetrics(model="L2", predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
+    return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
 def lasso_regression(training_df, testing_df, pro_name, periodicity):
@@ -198,7 +198,7 @@ def lasso_regression(training_df, testing_df, pro_name, periodicity):
         y_train = np.append(y_train, y_test[i])  # Rows
 
     print(f"> PROCESSED L1 Lasso Regression for project {pro_name} - periodicity: [{periodicity}]")
-    return assessmentMetrics(model="L1", predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
+    return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
 def xgboost(training_df, testing_df, pro_name, periodicity):
@@ -246,7 +246,7 @@ def xgboost(training_df, testing_df, pro_name, periodicity):
         y_train = np.append(y_train, y_test[i])  # Rows
 
     print(f"> PROCESSED XGBoost for project {pro_name} - periodicity: [{periodicity}]")
-    return assessmentMetrics(model="xgb", predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
+    return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
 def rf_forest(training_df, testing_df, pro_name, periodicity):
@@ -285,7 +285,7 @@ def rf_forest(training_df, testing_df, pro_name, periodicity):
         y_train = np.append(y_train, y_test[i])  # Rows
 
     print(f"> PROCESSED Random Forest Regression for project {pro_name} - periodicity: [{periodicity}]")
-    return assessmentMetrics(model="rf", predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
+    return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
 def sgd_regression(training_df, testing_df, pro_name, periodicity):
@@ -332,7 +332,7 @@ def sgd_regression(training_df, testing_df, pro_name, periodicity):
         y_train = np.append(y_train, y_test[i])  # Rows
 
     print(f"> PROCESSED Stochastic Gradient Descent for project {pro_name} - periodicity: [{periodicity}]")
-    return assessmentMetrics(model="sgd", predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
+    return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
 def ml_models():
@@ -373,9 +373,9 @@ def ml_models():
         # Checks if the directories for the given models and periodicity levels has already been implemented.
         if not os.path.exists(monthly_path):
             os.mkdir(monthly_path)
-        elif not os.path.exists(biweekly_path):
-              os.mkdir(biweekly_path)
-        elif not os.path.exists(complete_path):
+        if not os.path.exists(biweekly_path):
+            os.mkdir(biweekly_path)
+        if not os.path.exists(complete_path):
             os.mkdir(complete_path)
 
         # Creation of the dataframe to hold the model assessment results
@@ -387,11 +387,6 @@ def ml_models():
 
             project_name = biweekly_files[j][:-4]  # Removes the .csv extension from the project name
             # Removing extra index number and commit_date columns from the original dataset
-
-            # Check if the results have already been accomplished
-            if detect_existing_output(project=project_name, paths=[monthly_path, biweekly_path, complete_path],
-                                      flag_num=j, files_num=len(biweekly_files), approach="ML modelling"):
-                continue
 
             bi_encoding = check_encoding(path=os.path.join(biweekly_data_path, biweekly_files[j]))
             biweekly_df = (pd.read_csv(os.path.join(biweekly_data_path, biweekly_files[j]), encoding=bi_encoding)
@@ -440,13 +435,8 @@ def ml_models():
             print(f"> <{ml_model_names[i]}> ML modelling for project <{project_name}> performed - "
                   f"{j+1}/{len(biweekly_files)} projects - {i+1} of {len(models)} models")
 
-            # Saving the results per periods in csv
-            biweekly_file_path = os.path.join(biweekly_path, f"{biweekly_files[j]}")
-            monthly_file_path = os.path.join(monthly_path, f"{biweekly_files[j]}")
-            complete_file_path = os.path.join(complete_path, f"{biweekly_files[j]}")
-
-            biweekly_assessment_df.to_csv(biweekly_file_path, index=False)
-            monthly_assessment_df.to_csv(monthly_file_path, index=False)
-            complete_assessment_df.to_csv(complete_file_path, index=False)
+        biweekly_assessment_df.to_csv(os.path.join(biweekly_path, f"assessment.csv"), index=False)
+        monthly_assessment_df.to_csv(os.path.join(monthly_path, f"assessment.csv"), index=False)
+        complete_assessment_df.to_csv(os.path.join(complete_path, f"assessment.csv"), index=False)
 
     print("> ML MODELLING STAGE COMPLETED!")
