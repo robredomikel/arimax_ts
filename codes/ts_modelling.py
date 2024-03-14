@@ -29,9 +29,9 @@ def backward_modelling(df, periodicity, seasonality):
 
     # Define the ranges for d and D since we are manually iterating over these
     if seasonality:
-        d_range = D_range = range(0, 4)
+        d_range = D_range = range(0, 3)
     else:
-        d_range = range(0, 4)
+        d_range = range(0, 3)
         D_range = [0]  # We don't look into seasonal component
 
     if periodicity == "monthly":
@@ -53,13 +53,13 @@ def backward_modelling(df, periodicity, seasonality):
                 if seasonality:
                     auto_arima_model = auto_arima(training_df['SQALE_INDEX'], d=d, D=D, m=s, seasonal=seasonality,
                                                   stepwise=True, suppress_warnings=True,
-                                                  error_action='ignore', trace=False, maxiter=1000,
+                                                  error_action='ignore', trace=False,
                                                   information_criterion='aic')
                     P, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[2]
                 else:
                     auto_arima_model = auto_arima(training_df['SQALE_INDEX'], d=d, seasonal=seasonality,
                                                   stepwise=True, suppress_warnings=True,
-                                                  error_action='ignore', trace=False, maxiter=1000,
+                                                  error_action='ignore', trace=False,
                                                   information_criterion='aic')
                     P, Q = np.nan
 
@@ -104,10 +104,11 @@ def backward_modelling(df, periodicity, seasonality):
                                                         seasonal_order=(P, D, Q, s),
                                                         enforce_stationarity=True, enforce_invertibility=True)
                                 else:
-                                    model_try = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_try_scaled, order=(p, d, q),                                                        seasonal_order=(P, D, Q, s),
+                                    model_try = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_try_scaled, order=(p, d, q),
+                                                        seasonal_order=(P, D, Q, s),
                                                         enforce_stationarity=True, enforce_invertibility=True)
 
-                                results_try = model_try.fit(disp=0, maxiter=1000)
+                                results_try = model_try.fit(disp=0)
                                 aic_with_regressor_removed.append((results_try.aic, regressor))
                             except ConvergenceWarning:
                                 print(f"Failed to converge for model excluding {regressor}. Skipping...")
@@ -155,7 +156,7 @@ def model_testing(training_df, testing_df, best_model_cfg, best_regressors, seas
             model = SARIMAX(y_train.to_numpy(), exog=X_train_scaled.to_numpy(), order=arima_order,
                             enforce_stationarity=True, enforce_invertibility=True)
 
-        fitted_model = model.fit(disp=0, maxiter=1000)
+        fitted_model = model.fit(disp=0)
         print(f"model fit {i} times")
 
         # Model forecasting

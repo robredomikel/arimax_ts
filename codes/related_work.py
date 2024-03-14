@@ -36,7 +36,7 @@ def regressor_forecast(df, vals_to_predict, periodicity, regressor_name, best_mo
             model = SARIMAX(X_train, order=arima_order, enforce_stationarity=True,
                             enforce_invertibility=True)
 
-        fitted_model = model.fit(disp=0, maxiter=1000, seasonal=seasonality)
+        fitted_model = model.fit(disp=0, seasonal=seasonality)
         y_pred = fitted_model.get_forecast(steps=1)
         predictions.append(y_pred.predicted_mean[0])
         X_train.append(y_pred.predicted_mean[0])
@@ -95,8 +95,6 @@ def backward_modelling(df, periodicity, vals_to_predict, seasonality):
     else:
         s = 26  # Bi-weekly periodicity
 
-
-
     regressors = df.iloc[:, 2:].columns.tolist()
 
     # Create a dictionary with the predicted values for each predictor
@@ -117,13 +115,13 @@ def backward_modelling(df, periodicity, vals_to_predict, seasonality):
                     if seasonality:
                         auto_arima_model = auto_arima(variable_array, d=d, D=D, m=s, seasonal=True,
                                                   stepwise=True, suppress_warnings=True,
-                                                  error_action='ignore', trace=False, maxiter=1000,
+                                                  error_action='ignore', trace=False,
                                                   information_criterion='aic')
                         P, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[2]
                     else:
                         auto_arima_model = auto_arima(variable_array, d=d, seasonal=False,
                                                       stepwise=True, suppress_warnings=True,
-                                                      error_action='ignore', trace=False, maxiter=1000,
+                                                      error_action='ignore', trace=False,
                                                       information_criterion='aic')
                         P, Q = np.nan
 
@@ -150,13 +148,13 @@ def backward_modelling(df, periodicity, vals_to_predict, seasonality):
                 auto_arima_model = auto_arima(variable_array, m=s, seasonal=True,
                                               stepwise=True, suppress_warnings=True,
                                               error_action='ignore', trace=False,
-                                              information_criterion='aic', maxiter=1000)
+                                              information_criterion='aic')
                 P, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[2]
             else:
                 auto_arima_model = auto_arima(variable_array, seasonal=False,
                                               stepwise=True, suppress_warnings=True,
                                               error_action='ignore', trace=False,
-                                              information_criterion='aic', maxiter=1000)
+                                              information_criterion='aic')
                 P, Q = np.nan
 
             p, q = auto_arima_model.order[0], auto_arima_model.order[2]
