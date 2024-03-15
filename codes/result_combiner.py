@@ -142,7 +142,11 @@ def combine_results():
     for periodicity in periodicity_levels:
         merge_results(periodicity_level=periodicity)
 
-    # 1. Comparison among Seasonal Time Series and non-seasonal time series.
+    # Visualization stage
+    # 1. Comparison among Seasonal Time Series and non-seasonal time series. (bar plots)
     ts_comparison()
 
-    # 2. Comparison among Seasonal Time Series and non-seasonal ML models (since they cannot control seasonality aspects)
+    # 2. Comparison among Seasonal Time Series and non-seasonal ML models (spider charts)
+
+
+

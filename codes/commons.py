@@ -5,8 +5,8 @@ assessment_statistics = ["PROJECT", "MAPE", "MSE", "MAE", "RMSE"]
 final_table_columns = ['Approach', 'Type', 'MAPE (%)', 'MAE', 'MSE', 'RMSE']
 
 # Flag values for process control of the project
-SARIMAX = False
-RELATED_WORK = False
-ML_MODELS = True
+SARIMAX = True
+RELATED_WORK = True
+ML_MODELS = False
 COMBINE_RESULTS = False
 VISUALIZE = False

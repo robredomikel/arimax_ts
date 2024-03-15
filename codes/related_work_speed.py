@@ -84,12 +84,13 @@ def backward_modelling(df, periodicity, vals_to_predict, seasonality):
     a JSON file
     """
     # Define the ranges for d and D since we are manually iterating over these
+    """
     if seasonality:
-        d_range = D_range = range(0, 3)
+        d_range = D_range = range(0, 4)
     else:
-        d_range = range(0, 3)
+        d_range = range(0, 4)
         D_range = [0]  # We don't look into seasonal component
-
+    """
     if periodicity == "monthly":
         s = 12  # Seasonal period
     else:
@@ -107,54 +108,52 @@ def backward_modelling(df, periodicity, vals_to_predict, seasonality):
         best_regressors = None
         variable_array = df[regressor_name].astype(float)
 
-        # Iterate over d and D values
-        for D in D_range:
-            for d in d_range:
-                # Use auto_arima to find the best p, q, P, Q given d and D
-                try:
-                    if seasonality:
-                        auto_arima_model = auto_arima(variable_array, d=d, D=D, m=s, seasonal=True,
-                                                      stepwise=True, suppress_warnings=True,
-                                                      error_action='ignore', trace=False,
-                                                      information_criterion='aic')
-                        P, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[2]
-                    else:
-                        auto_arima_model = auto_arima(variable_array, d=d, seasonal=False,
-                                                      stepwise=True, suppress_warnings=True,
-                                                      error_action='ignore', trace=False,
-                                                      information_criterion='aic')
-                        P, Q = np.nan
+        # Use auto_arima to find the best p, q, P, Q given d and D
+        try:
+            if seasonality:
+                auto_arima_model = auto_arima(variable_array, m=s, seasonal=True,
+                                          stepwise=True, suppress_warnings=True,
+                                          error_action='ignore', trace=False,
+                                          information_criterion='aic')
+                P, D, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[1], auto_arima_model.seasonal_order[2]
+            else:
+                auto_arima_model = auto_arima(variable_array, seasonal=False,
+                                              stepwise=True, suppress_warnings=True,
+                                              error_action='ignore', trace=False,
+                                              information_criterion='aic')
+                P, D, Q = np.nan
 
-                    # Extract the best ARIMA order and seasonal order found by auto_arima
-                    p, q = auto_arima_model.order[0], auto_arima_model.order[2]
+            # Extract the best ARIMA order and seasonal order found by auto_arima
+            p, d, q = auto_arima_model.order[0], auto_arima_model.order[1], auto_arima_model.order[2]
 
-                    scored_aic = auto_arima_model.aic()
-                    print(f"Best p, q combination: {p} {q} - Seasonal: {P} {Q}")
-                    print(f"d: {d}, D: {D}, aic: {round(scored_aic, 2)}")
+            scored_aic = auto_arima_model.aic()
+            print(f"Best p, q combination: {p} {q} - Seasonal: {P} {Q}")
+            print(f"d: {d}, D: {D}, aic: {round(scored_aic, 2)}")
 
-                    if scored_aic < best_aic:
-                        best_aic = auto_arima_model.aic()
-                        best_model_cfg = ((p, d, q), (P, D, Q, s))
+            if scored_aic < best_aic:
+                best_aic = auto_arima_model.aic()
+                best_model_cfg = ((p, d, q), (P, D, Q, s))
 
-                except Exception as e:
-                    print(f"Error with configuration: {(d, D)} - {str(e)}")
-                    continue
+        except Exception as e:
+            print(f"Error with configuration: {str(e)}")
+            continue
 
         # Meaning that the long iterative process for obtaining the best hyperparameter combination, we compute simple
         # auto_arima computation
+        """
         if best_aic == np.inf:
 
             if seasonality:
                 auto_arima_model = auto_arima(variable_array, m=s, seasonal=True,
                                               stepwise=True, suppress_warnings=True,
                                               error_action='ignore', trace=False,
-                                              information_criterion='aic')
+                                              information_criterion='aic', maxiter=1000)
                 P, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[2]
             else:
                 auto_arima_model = auto_arima(variable_array, seasonal=False,
                                               stepwise=True, suppress_warnings=True,
                                               error_action='ignore', trace=False,
-                                              information_criterion='aic')
+                                              information_criterion='aic', maxiter=1000)
                 P, Q = np.nan
 
             p, q = auto_arima_model.order[0], auto_arima_model.order[2]
@@ -162,7 +161,7 @@ def backward_modelling(df, periodicity, vals_to_predict, seasonality):
             print(f"ATTENTION: Hyperparameter identification didn't work, running simple auto_arima...")
             print(f"Best p, q combination: {p} {q} - Seasonal: {P} {Q}")
             print(f"d: {d}, D: {D}")
-
+        """
         if seasonality:
             print(f"Best SARIMA{best_model_cfg} - AIC:{best_aic} for regressor {regressor_name}")
         else:
