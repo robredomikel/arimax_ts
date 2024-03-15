@@ -74,9 +74,9 @@ def backward_modelling(df, periodicity, seasonality):
         # Begin backward selection of regressors
         current_regressors = training_df.iloc[:, 2:].columns.tolist()
         while current_regressors:
-            tmp_X = training_df[current_regressors]
-            tmp_X_scaled = np.log1p(tmp_X)
-            print(current_regressors)
+            # tmp_X = training_df[current_regressors]
+            # tmp_X_scaled = np.log1p(tmp_X)
+            print(f"> REMAINING REGRESSORS: {len(current_regressors)}")
 
             """
             if seasonality:
@@ -88,9 +88,10 @@ def backward_modelling(df, periodicity, seasonality):
                                 enforce_stationarity=True, enforce_invertibility=True)
             """
 
-            print("Fitting model...")
+            print("> Fitting model...")
             if len(current_regressors) > 1:
                 aic_with_regressor_removed = []
+                i = 0
                 for regressor in current_regressors:
                     try_regressors = current_regressors.copy()
                     try_regressors.remove(regressor)
@@ -101,30 +102,29 @@ def backward_modelling(df, periodicity, seasonality):
                         if seasonality:
 
                             # First get the best model combinations through the stepwise auto_arima
-                            auto_arima_model = auto_arima(training_df['SQALE_INDEX'], X=tmp_X_try_scaled, m=s, seasonal=seasonality,
+                            auto_arima_model = auto_arima(training_df['SQALE_INDEX'].to_numpy(), X=tmp_X_try_scaled, m=s, seasonal=seasonality,
                                                           stepwise=True, suppress_warnings=True,
-                                                          error_action='ignore', trace=False,
-                                                          information_criterion='aic')
+                                                          error_action='ignore', trace=True,
+                                                          information_criterion='aic', test='adf')
                             P, D, Q = (auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[1],
                                        auto_arima_model.seasonal_order[2])
                             # Extract the best ARIMA order and seasonal order found by auto_arima
                             p, d, q = auto_arima_model.order[0], auto_arima_model.order[1], auto_arima_model.order[2]
                             # Second, obtain SARIMAX model from the obtained parameter combinations.
-                            model_try = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_try_scaled, order=(p, d, q),
+                            model_try = SARIMAX(training_df['SQALE_INDEX'].to_numpy(), exog=tmp_X_try_scaled, order=(p, d, q),
                                                 seasonal_order=(P, D, Q, s),
                                                 enforce_stationarity=True, enforce_invertibility=True)
                         else:
                             # First get the best model combinations through the stepwise auto_arima
-                            auto_arima_model = auto_arima(training_df['SQALE_INDEX'], X=tmp_X_try_scaled, m=s, seasonal=seasonality,
+                            auto_arima_model = auto_arima(training_df['SQALE_INDEX'].to_numpy(), X=tmp_X_try_scaled, m=s, seasonal=seasonality,
                                                           stepwise=True, suppress_warnings=True,
-                                                          error_action='ignore', trace=False,
-                                                          information_criterion='aic')
+                                                          error_action='ignore', trace=True,
+                                                          information_criterion='aic', test='adf')
                             P, D, Q = (auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[1],
                                        auto_arima_model.seasonal_order[2])
                             # Extract the best ARIMA order and seasonal order found by auto_arima
                             p, d, q = auto_arima_model.order[0], auto_arima_model.order[1], auto_arima_model.order[2]
-                            model_try = SARIMAX(training_df['SQALE_INDEX'], exog=tmp_X_try_scaled, order=(p, d, q),
-                                                seasonal_order=(P, D, Q, s),
+                            model_try = SARIMAX(training_df['SQALE_INDEX'].to_numpy(), exog=tmp_X_try_scaled, order=(p, d, q),
                                                 enforce_stationarity=True, enforce_invertibility=True)
 
                         results_try = model_try.fit(disp=0)
@@ -133,26 +133,30 @@ def backward_modelling(df, periodicity, seasonality):
                         # We check which has been so far the best model
                         if results_try.aic < best_aic:
                             best_aic = results_try.aic
+
                             best_model_cfg = ((p, d, q), (P, D, Q, s))
                             best_regressors = current_regressors.copy()
                     except ConvergenceWarning:
-                        print(f"Failed to converge for model excluding {regressor}. Skipping...")
+                        print(f"> Failed to converge for model excluding {regressor}. Skipping...")
                         continue
 
                 aic_with_regressor_removed.sort()
                 current_regressors.remove(aic_with_regressor_removed[0][1])
+
+                print(f"> ts modelling performed when seasonality: {seasonality} - {i+1}/{len(current_regressors)}")
+                i+=1
             else:
-                print("break - all regressor combinations examined")
+                print("> break - all regressor combinations examined")
                 break  # Stop if only one regressor left
 
-            print(f"Number of remaining predictors: {len(current_regressors)}")
+            print(f"> Number of remaining predictors: {len(current_regressors)}")
     except Exception as e:
-        print(f"Error with configuration: {str(e)}")
+        print(f"> Error with configuration: {str(e)}")
 
     if seasonality:
-        print(f"Best SARIMAX{best_model_cfg} - AIC:{best_aic} with regressors {best_regressors}")
+        print(f"> Best SARIMAX{best_model_cfg} - AIC:{best_aic} with regressors {best_regressors}")
     else:
-        print(f"Best ARIMAX{best_model_cfg} - AIC:{best_aic} with regressors {best_regressors}")
+        print(f"> Best ARIMAX{best_model_cfg} - AIC:{best_aic} with regressors {best_regressors}")
     return best_model_cfg, round(best_aic, 2), best_regressors
 
 
@@ -182,7 +186,7 @@ def model_testing(training_df, testing_df, best_model_cfg, best_regressors, seas
                             enforce_stationarity=True, enforce_invertibility=True)
 
         fitted_model = model.fit(disp=0)
-        print(f"model fit {i} times")
+        print(f"> model fit {i} times")
 
         # Model forecasting
         best_reg_df = testing_df[best_regressors]

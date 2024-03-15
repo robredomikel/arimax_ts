@@ -57,28 +57,36 @@ def ols_prediction(train_df, test_df, prediction_regressors):
 
     # Assign the data to X and Y.
     regressor_names = train_df.iloc[:, 2:].columns.tolist()
-    X = train_df[regressor_names]
-    X = sm.add_constant(X)
+    X = train_df[regressor_names].to_numpy().astype(np.float64)
+    # Convert the needed data from df to matrix format
+    constant_train = np.ones(shape=(len(X), 1))
+    # Explicitly adding the intercept of the Linear Regression
+    X = np.concatenate((constant_train, X), axis=1)
+
     y = train_df["SQALE_INDEX"]
     # Create and fit the model
     model = sm.OLS(y, X).fit()
     real_y_vals = test_df["SQALE_INDEX"]
-    X_test = prediction_regressors
-    X_test = sm.add_constant(X_test)
+    X_test = prediction_regressors.to_numpy().astype(np.float64)
+    constant_test = np.ones(shape=(len(X_test), 1))
+    # Explicitly adding the intercept of the Linear Regression
+    X_test = np.concatenate((constant_test, X_test), axis=1)
     predictions = []
 
     # Perform the walk forward optimization for one step ahead
     for i in range(len(test_df)):
 
-        est = model.predict(X_test.iloc[i, :].values.reshape(1, -1))
-        predictions.append(est[0])
+        # New observation for prediction
+        new_observation = X_test[i:i+1, :]
+        est = model.predict(new_observation)
+        predictions.append(np.take(est, 0))
 
     mape_val, mse_val, mae_val, rmse_val = assessment_metrics(predictions=predictions, real_values=real_y_vals.tolist())
 
     return [mape_val, mse_val, mae_val, rmse_val, model.aic, model.bic]
 
 
-def backward_modelling(df, periodicity, vals_to_predict, seasonality):
+def backward_modelling(df, periodicity, vals_to_predict, seasonality, project_name):
     """
     Finds the best modelling order for the SARIMA model and stores its' parameters, AIC value and useful regressors in
     a JSON file
@@ -101,6 +109,10 @@ def backward_modelling(df, periodicity, vals_to_predict, seasonality):
     # Create a dictionary with the predicted values for each predictor
     regressor_dict = {}
 
+    # Stores the results in a json file
+    json_dict = {}
+
+    i = 0
     for regressor_name in regressors:
 
         best_aic = np.inf
@@ -109,33 +121,35 @@ def backward_modelling(df, periodicity, vals_to_predict, seasonality):
         variable_array = df[regressor_name].astype(float)
 
         # Use auto_arima to find the best p, q, P, Q given d and D
+        print(f"> Model fitting in process...")
         try:
             if seasonality:
                 auto_arima_model = auto_arima(variable_array, m=s, seasonal=True,
                                           stepwise=True, suppress_warnings=True,
-                                          error_action='ignore', trace=False,
-                                          information_criterion='aic')
+                                          error_action='ignore', trace=True,
+                                          information_criterion='aic', test='adf')
                 P, D, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[1], auto_arima_model.seasonal_order[2]
             else:
                 auto_arima_model = auto_arima(variable_array, seasonal=False,
                                               stepwise=True, suppress_warnings=True,
-                                              error_action='ignore', trace=False,
-                                              information_criterion='aic')
+                                              error_action='ignore', trace=True,
+                                              information_criterion='aic', test='adf')
                 P, D, Q = np.nan
 
+            print(f"> Model fitting for regressor {regressor_name} perfomed!")
             # Extract the best ARIMA order and seasonal order found by auto_arima
             p, d, q = auto_arima_model.order[0], auto_arima_model.order[1], auto_arima_model.order[2]
 
             scored_aic = auto_arima_model.aic()
-            print(f"Best p, q combination: {p} {q} - Seasonal: {P} {Q}")
-            print(f"d: {d}, D: {D}, aic: {round(scored_aic, 2)}")
+            print(f"> Best p, q combination: {p} {q} - Seasonal: {P} {Q}")
+            print(f"> d: {d}, D: {D}, aic: {round(scored_aic, 2)}")
 
             if scored_aic < best_aic:
                 best_aic = auto_arima_model.aic()
                 best_model_cfg = ((p, d, q), (P, D, Q, s))
 
         except Exception as e:
-            print(f"Error with configuration: {str(e)}")
+            print(f"> Error with configuration: {str(e)}")
             continue
 
         # Meaning that the long iterative process for obtaining the best hyperparameter combination, we compute simple
@@ -163,9 +177,13 @@ def backward_modelling(df, periodicity, vals_to_predict, seasonality):
             print(f"d: {d}, D: {D}")
         """
         if seasonality:
-            print(f"Best SARIMA{best_model_cfg} - AIC:{best_aic} for regressor {regressor_name}")
+            print(f"> Best SARIMA{best_model_cfg} - AIC:{best_aic} for regressor {regressor_name}")
         else:
-            print(f"Best ARIMA{best_model_cfg} - AIC:{best_aic} for regressor {regressor_name}")
+            print(f"> Best ARIMA{best_model_cfg} - AIC:{best_aic} for regressor {regressor_name}")
+
+        # Monitorization of the results for each regressor
+        parameter_dict = {'model_params': best_model_cfg, 'best_aic': best_aic, "best_regressors": best_regressors}
+        json_dict[regressor_name] = parameter_dict
 
         # Forecasting the values of the regressors for the testing
         sarima_predictions = regressor_forecast(df=df, vals_to_predict=vals_to_predict, periodicity=periodicity,
@@ -175,7 +193,26 @@ def backward_modelling(df, periodicity, vals_to_predict, seasonality):
         # Store the predicted values for the regressors in the dict of predictions
         regressor_dict[regressor_name] = sarima_predictions
 
+        print(f"> Variable {regressor_name} processed and predicted - {i+1}/{len(regressors)}")
+        i+=1
     regressor_df = pd.DataFrame.from_dict(regressor_dict)
+
+    if seasonality:
+        best_model_path = os.path.join(DATA_PATH, "best_sarima_regressor_models")
+    if not os.path.exists(best_model_path):
+        os.mkdir(best_model_path)
+        os.mkdir(os.path.join(best_model_path, "biweekly"))
+        os.mkdir(os.path.join(best_model_path, "monthly"))
+    else:
+        best_model_path = os.path.join(DATA_PATH, "best_arima_models")
+        if not os.path.exists(best_model_path):
+            os.mkdir(best_model_path)
+            os.mkdir(os.path.join(best_model_path, "biweekly"))
+            os.mkdir(os.path.join(best_model_path, "monthly"))
+
+    json_object = json.dumps(json_dict, indent=4)
+    with open(os.path.join(best_model_path, periodicity, f"{project_name}.json"), 'w+') as out:
+        out.write(json_object)
 
     return regressor_df
 
@@ -207,7 +244,7 @@ def relwork_model(df_path, project_name, periodicity, seasonality):
 
     # SARIMA regressor predictors
     predicted_regressors = backward_modelling(df=training_df, periodicity=periodicity, vals_to_predict=len(testing_df),
-                                              seasonality=seasonality)
+                                              seasonality=seasonality, project_name=project_name)
 
     # LM prediction phase
     predicted_y_vals = ols_prediction(train_df=training_df, test_df=testing_df,
