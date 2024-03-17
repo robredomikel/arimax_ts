@@ -30,13 +30,16 @@ def regressor_forecast(df, vals_to_predict, periodicity, regressor_name, best_mo
     for i in range(vals_to_predict):
 
         if seasonality:
-            model = SARIMAX(X_train, order=arima_order, seasonal_order=s_order, enforce_stationarity=True,
-                            enforce_invertibility=True)
+            model = SARIMAX(X_train, order=arima_order, seasonal_order=s_order, enforce_stationarity=True)
         else:
-            model = SARIMAX(X_train, order=arima_order, enforce_stationarity=True,
-                            enforce_invertibility=True)
+            model = SARIMAX(X_train, order=arima_order, enforce_stationarity=True)
 
-        fitted_model = model.fit(disp=0, seasonal=seasonality)
+        try:
+            fitted_model = model.fit(disp=0, seasonal=seasonality)
+        except np.linalg.LinAlgError:
+            print("> Couldn't predict new values for regressor {}".format(regressor_name))
+            return [np.nan] * vals_to_predict
+
         y_pred = fitted_model.get_forecast(steps=1)
         predictions.append(y_pred.predicted_mean[0])
         X_train.append(y_pred.predicted_mean[0])
@@ -86,7 +89,7 @@ def ols_prediction(train_df, test_df, prediction_regressors):
     return [mape_val, mse_val, mae_val, rmse_val, model.aic, model.bic]
 
 
-def backward_modelling(df, periodicity, vals_to_predict, seasonality, project_name):
+def backward_modelling(df, periodicity, vals_to_predict, seasonality, project_name, output_flag=True):
     """
     Finds the best modelling order for the SARIMA model and stores its' parameters, AIC value and useful regressors in
     a JSON file
@@ -125,16 +128,16 @@ def backward_modelling(df, periodicity, vals_to_predict, seasonality, project_na
         try:
             if seasonality:
                 auto_arima_model = auto_arima(variable_array, m=s, seasonal=True,
-                                          stepwise=True, suppress_warnings=True,
-                                          error_action='ignore', trace=True,
-                                          information_criterion='aic', test='adf')
-                P, D, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[1], auto_arima_model.seasonal_order[2]
-            else:
-                auto_arima_model = auto_arima(variable_array, seasonal=False,
                                               stepwise=True, suppress_warnings=True,
                                               error_action='ignore', trace=True,
                                               information_criterion='aic', test='adf')
-                P, D, Q = np.nan
+                P, D, Q = auto_arima_model.seasonal_order[0], auto_arima_model.seasonal_order[1], auto_arima_model.seasonal_order[2]
+            else:
+                auto_arima_model = auto_arima(variable_array, m=s, seasonal=False,
+                                              stepwise=True, suppress_warnings=True,
+                                              error_action='ignore', trace=True,
+                                              information_criterion='aic', test='adf')
+                P, D, Q = np.nan , np.nan , np.nan
 
             print(f"> Model fitting for regressor {regressor_name} perfomed!")
             # Extract the best ARIMA order and seasonal order found by auto_arima
@@ -150,7 +153,8 @@ def backward_modelling(df, periodicity, vals_to_predict, seasonality, project_na
 
         except Exception as e:
             print(f"> Error with configuration: {str(e)}")
-            continue
+            output_flag=False
+            return output_flag
 
         # Meaning that the long iterative process for obtaining the best hyperparameter combination, we compute simple
         # auto_arima computation
@@ -190,6 +194,10 @@ def backward_modelling(df, periodicity, vals_to_predict, seasonality, project_na
                                                 regressor_name=regressor_name, best_model_cfg=best_model_cfg,
                                                 seasonality=seasonality)
 
+        # If there is any nan value in the predicted values for the regressor we exclude it.
+        if np.nan in sarima_predictions:
+            continue
+
         # Store the predicted values for the regressors in the dict of predictions
         regressor_dict[regressor_name] = sarima_predictions
 
@@ -199,10 +207,10 @@ def backward_modelling(df, periodicity, vals_to_predict, seasonality, project_na
 
     if seasonality:
         best_model_path = os.path.join(DATA_PATH, "best_sarima_regressor_models")
-    if not os.path.exists(best_model_path):
-        os.mkdir(best_model_path)
-        os.mkdir(os.path.join(best_model_path, "biweekly"))
-        os.mkdir(os.path.join(best_model_path, "monthly"))
+        if not os.path.exists(best_model_path):
+            os.mkdir(best_model_path)
+            os.mkdir(os.path.join(best_model_path, "biweekly"))
+            os.mkdir(os.path.join(best_model_path, "monthly"))
     else:
         best_model_path = os.path.join(DATA_PATH, "best_arima_models")
         if not os.path.exists(best_model_path):
@@ -246,6 +254,10 @@ def relwork_model(df_path, project_name, periodicity, seasonality):
     predicted_regressors = backward_modelling(df=training_df, periodicity=periodicity, vals_to_predict=len(testing_df),
                                               seasonality=seasonality, project_name=project_name)
 
+    # If the predicted regressors are a boolean means that there was an error with the project for the calculation
+    if type(predicted_regressors) is bool:
+        print(f"> Regressors for project {project_name} couldn't be predicted for the ARIMA+LM approach")
+        return [project_name, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
     # LM prediction phase
     predicted_y_vals = ols_prediction(train_df=training_df, test_df=testing_df,
                                       prediction_regressors=predicted_regressors)
@@ -267,8 +279,8 @@ def related_models(seasonality):
     else:
         output_directory = "arima_lm_results"
 
-    biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data_orig")
-    monthly_data_path = os.path.join(DATA_PATH, "monthly_data_orig")
+    biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data")
+    monthly_data_path = os.path.join(DATA_PATH, "monthly_data")
     output_path = os.path.join(DATA_PATH, output_directory)
     if not os.path.exists(output_path):
         os.mkdir(output_path)
@@ -280,8 +292,6 @@ def related_models(seasonality):
     monthly_files = os.listdir(monthly_data_path)
 
     assessment_statistics = ["PROJECT", "MAPE", "MSE", "MAE", "RMSE", "AIC", "BIC"]
-    biweekly_assessment = pd.DataFrame(columns=assessment_statistics)
-    monthly_assessment = pd.DataFrame(columns=assessment_statistics)
 
     for i in range(len(biweekly_files)):
 
@@ -289,10 +299,15 @@ def related_models(seasonality):
         monthly_results_path = os.path.join(output_path, "monthly_results", f"{project}.csv")
         biweekly_results_path = os.path.join(output_path, "biweekly_results", f"{project}.csv")
 
+        biweekly_assessment = pd.DataFrame(columns=assessment_statistics)
+        monthly_assessment = pd.DataFrame(columns=assessment_statistics)
+
         if detect_existing_output(project=project, paths=[monthly_results_path, biweekly_results_path],
                                   flag_num=i, files_num=len(biweekly_files), approach=f"{seasonality}-ARIMA+LM"):
+            print(f"> Project {project} already procesed for ARIMA+LM modelling")
             continue
 
+        print(f"> Processing {project} for biweekly data")
         biweekly_statistics = relwork_model(df_path=os.path.join(biweekly_data_path, biweekly_files[i]),
                                             project_name=project, periodicity="biweekly", seasonality=seasonality)
 
@@ -300,11 +315,12 @@ def related_models(seasonality):
         biweekly_assessment.loc[len(biweekly_assessment)] = biweekly_statistics
         biweekly_assessment.to_csv(biweekly_results_path, index=False)
 
+        print(f"> Processing {project} for monthly data")
         monthly_statistics = relwork_model(df_path=os.path.join(monthly_data_path, monthly_files[i]),
                                            project_name=project, periodicity="monthly", seasonality=seasonality)
 
         monthly_assessment.loc[len(monthly_assessment)] = monthly_statistics
-        monthly_assessment.to_csv(biweekly_results_path, index=False)
+        monthly_assessment.to_csv(monthly_results_path, index=False)
 
         if seasonality:
             print(f"> SARIMA+LM modelling for project <{project}> performed - {i+1}/{len(biweekly_files)}")

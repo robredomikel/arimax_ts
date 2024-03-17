@@ -57,21 +57,29 @@ def ols_prediction(train_df, test_df, prediction_regressors):
 
     # Assign the data to X and Y.
     regressor_names = train_df.iloc[:, 2:].columns.tolist()
-    X = train_df[regressor_names]
-    X = sm.add_constant(X)
+    X = train_df[regressor_names].to_numpy().astype(np.float64)
+    # Convert the needed data from df to matrix format
+    constant_train = np.ones(shape=(len(X), 1))
+    # Explicitly adding the intercept of the Linear Regression
+    X = np.concatenate((constant_train, X), axis=1)
+
     y = train_df["SQALE_INDEX"]
     # Create and fit the model
     model = sm.OLS(y, X).fit()
     real_y_vals = test_df["SQALE_INDEX"]
-    X_test = prediction_regressors
-    X_test = sm.add_constant(X_test)
+    X_test = prediction_regressors.to_numpy().astype(np.float64)
+    constant_test = np.ones(shape=(len(X_test), 1))
+    # Explicitly adding the intercept of the Linear Regression
+    X_test = np.concatenate((constant_test, X_test), axis=1)
     predictions = []
 
     # Perform the walk forward optimization for one step ahead
     for i in range(len(test_df)):
 
-        est = model.predict(X_test.iloc[i, :].values.reshape(1, -1))
-        predictions.append(est[0])
+        # New observation for prediction
+        new_observation = X_test[i:i+1, :]
+        est = model.predict(new_observation)
+        predictions.append(np.take(est, 0))
 
     mape_val, mse_val, mae_val, rmse_val = assessment_metrics(predictions=predictions, real_values=real_y_vals.tolist())
 
@@ -231,8 +239,8 @@ def related_models(seasonality):
     else:
         output_directory = "arima_lm_results"
 
-    biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data_orig")
-    monthly_data_path = os.path.join(DATA_PATH, "monthly_data_orig")
+    biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data")
+    monthly_data_path = os.path.join(DATA_PATH, "monthly_data")
     output_path = os.path.join(DATA_PATH, output_directory)
     if not os.path.exists(output_path):
         os.mkdir(output_path)

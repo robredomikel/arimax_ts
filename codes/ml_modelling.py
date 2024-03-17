@@ -341,8 +341,8 @@ def ml_models():
     :return:
     """
 
-    biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data_orig")
-    monthly_data_path = os.path.join(DATA_PATH, "monthly_data_orig")
+    biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data")
+    monthly_data_path = os.path.join(DATA_PATH, "monthly_data")
     complete_data_path = os.path.join(DATA_PATH, "complete_data")
     output_path = os.path.join(DATA_PATH, "results")
     if not os.path.exists(output_path):

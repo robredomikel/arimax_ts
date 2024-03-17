@@ -257,8 +257,8 @@ def ts_models(seasonality):
     else:
         output_directory = "arimax_results"
 
-    biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data_orig")
-    monthly_data_path = os.path.join(DATA_PATH, "monthly_data_orig")
+    biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data")
+    monthly_data_path = os.path.join(DATA_PATH, "monthly_data")
     output_path = os.path.join(DATA_PATH, output_directory)
     if not os.path.exists(output_path):
         os.mkdir(output_path)

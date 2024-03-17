@@ -6,8 +6,10 @@ NOTE: The data collection and preprocessing has been already performed.
 
 import os
 from ml_modelling import ml_models
-from ts_modelling import ts_models
-from related_work import related_models
+#from ts_modelling import ts_models
+#from related_work import related_models
+from ts_modelling_speed import ts_models
+from related_work_speed import related_models
 from chart_creator import create_charts
 from result_combiner import combine_results
 from commons import SARIMAX, RELATED_WORK, ML_MODELS, COMBINE_RESULTS, VISUALIZE
@@ -17,7 +19,7 @@ def main():
 
     # SARIMAX modelling stage execution
     if SARIMAX:
-        ts_models(seasonality=True)
+        # ts_models(seasonality=True)
         ts_models(seasonality=False)  # Replicated work
 
     # SARIMA + LM related work stage execution

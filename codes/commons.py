@@ -6,7 +6,7 @@ final_table_columns = ['Approach', 'Type', 'MAPE (%)', 'MAE', 'MSE', 'RMSE']
 
 # Flag values for process control of the project
 SARIMAX = True
-RELATED_WORK = True
+RELATED_WORK = False
 ML_MODELS = False
 COMBINE_RESULTS = False
 VISUALIZE = False

@@ -14,7 +14,7 @@ from commons import DATA_PATH
 from modules import MAPE, RMSE, MAE, MSE, check_encoding, detect_existing_output
 
 
-def backward_modelling(df, periodicity, seasonality):
+def backward_modelling(df, periodicity, seasonality, output_flag=True):
     """
     Finds the best modelling order for the SARIMAX model and stores its' parameters, AIC value and useful regressors in
     a JSON file
@@ -152,15 +152,16 @@ def backward_modelling(df, periodicity, seasonality):
             print(f"> Number of remaining predictors: {len(current_regressors)}")
     except Exception as e:
         print(f"> Error with configuration: {str(e)}")
+        output_flag = False
 
     if seasonality:
         print(f"> Best SARIMAX{best_model_cfg} - AIC:{best_aic} with regressors {best_regressors}")
     else:
         print(f"> Best ARIMAX{best_model_cfg} - AIC:{best_aic} with regressors {best_regressors}")
-    return best_model_cfg, round(best_aic, 2), best_regressors
+    return best_model_cfg, round(best_aic, 2), best_regressors, output_flag
 
 
-def model_testing(training_df, testing_df, best_model_cfg, best_regressors, seasonality):
+def model_testing(training_df, testing_df, best_model_cfg, best_regressors, seasonality, project):
     """
     Given the best model order parameters obtained from the backward variable selection and aut_arima tuning we
     fit the SARIMAX model for forecasting
@@ -198,6 +199,8 @@ def model_testing(training_df, testing_df, best_model_cfg, best_regressors, seas
         new_obs = testing_df.iloc[i, :]
         training_df = pd.concat([training_df, new_obs.to_frame().T], ignore_index=False, axis=0)
 
+    print(f"> Model testing stage performed for project {project}")
+
     return predictions, round(fitted_model.aic, 2), round(fitted_model.bic, 2)
 
 
@@ -233,11 +236,15 @@ def arimax_model(df_path, project_name, periodicity, seasonality):
     testing_df = df.iloc[split_point:, :]
 
     # SARIMAX backward modelling
-    best_model_params, best_aic, best_regressors = backward_modelling(df=training_df, periodicity=periodicity,
-                                                                      seasonality=seasonality)
-    # best_model_params = (1, 0, 1), (2, 3, 0, 26)
-    # best_aic = -144.89
-    # best_regressors = ['S1213', 'RedundantThrowsDeclarationCheck', 'S00122', 'S1488', 'DuplicatedBlocks', 'S1155', 'S1151', 'S1132']
+    best_model_params, best_aic, best_regressors, output_flag = backward_modelling(df=training_df,
+                                                                                   periodicity=periodicity,
+                                                                                   seasonality=seasonality,
+                                                                                   output_flag=True)
+
+    # If there was error in the calculation of the backward modelling then we exclude the results from this project
+    # for the given data format.
+    if output_flag is False:
+        return [project_name, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
 
     # Store the obtained results in json:
     if seasonality:
@@ -260,11 +267,15 @@ def arimax_model(df_path, project_name, periodicity, seasonality):
         out.write(json_object)
 
     # Model testing
-    predictions, aic_val, bic_val = model_testing(training_df=training_df, testing_df=testing_df,
-                                                  best_model_cfg=best_model_params, best_regressors=best_regressors,
-                                                  seasonality=seasonality)
+    try:
+        predictions, aic_val, bic_val = model_testing(training_df=training_df, testing_df=testing_df,
+                                                      best_model_cfg=best_model_params, best_regressors=best_regressors,
+                                                      seasonality=seasonality, project=project_name)
+        assessment_vals = assessment_metrics(predictions=predictions, real_values=testing_df["SQALE_INDEX"].tolist())
 
-    assessment_vals = assessment_metrics(predictions=predictions, real_values=testing_df["SQALE_INDEX"].tolist())
+    except np.linalg.LinAlgError:  # In case there is some lineal algebra decomposition error
+        assessment_vals = [np.nan, np.nan, np.nan, np.nan]
+        aic_val, bic_val = np.nan, np.nan
 
     print(f"> Final results for project {project_name}:\n"
           f"MAPE:{assessment_vals[0]}\n"
@@ -286,8 +297,8 @@ def ts_models(seasonality):
     else:
         output_directory = "arimax_results"
 
-    biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data_orig")
-    monthly_data_path = os.path.join(DATA_PATH, "monthly_data_orig")
+    biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data")
+    monthly_data_path = os.path.join(DATA_PATH, "monthly_data")
     output_path = os.path.join(DATA_PATH, output_directory)
     if not os.path.exists(output_path):
         os.mkdir(output_path)
@@ -299,21 +310,23 @@ def ts_models(seasonality):
     monthly_files = os.listdir(monthly_data_path)
 
     assessment_statistics = ["PROJECT", "MAPE", "MSE", "MAE", "RMSE", "AIC", "BIC"]
-    biweekly_assessment = pd.DataFrame(columns=assessment_statistics)
-    monthly_assessment = pd.DataFrame(columns=assessment_statistics)
-
     for i in range(len(biweekly_files)):
 
         project = biweekly_files[i][:-4]
         monthly_results_path = os.path.join(output_path, "monthly_results", f"{project}.csv")
         biweekly_results_path = os.path.join(output_path, "biweekly_results", f"{project}.csv")
 
+        biweekly_assessment = pd.DataFrame(columns=assessment_statistics)
+        monthly_assessment = pd.DataFrame(columns=assessment_statistics)
+
         # Check if the project has already been processed
         if detect_existing_output(project=project, paths=[monthly_results_path, biweekly_results_path],
                                   flag_num=i, files_num=len(biweekly_files), approach=f"{seasonality}-ARIMAX"):
+            print(f"> Project {project} already procesed for SARIMAX modelling")
             continue
 
         # Runs the SARIMAX execution for the given project in biweekly format
+        print(f"> Processing {project} for biweekly data")
         biweekly_statistics = arimax_model(df_path=os.path.join(biweekly_data_path, biweekly_files[i]),
                                            project_name=project,
                                            periodicity="biweekly",
@@ -321,7 +334,7 @@ def ts_models(seasonality):
 
         biweekly_assessment.loc[len(biweekly_assessment)] = biweekly_statistics
         biweekly_assessment.to_csv(biweekly_results_path, index=False)
-
+        print(f"> Processing {project} for monthly data")
         monthly_statistics = arimax_model(df_path=os.path.join(monthly_data_path, monthly_files[i]),
                                           project_name=project,
                                           periodicity="monthly",
