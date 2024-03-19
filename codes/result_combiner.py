@@ -27,16 +27,13 @@ def check_results(periodicity_level):
             os.mkdir(os.path.join(DATA_PATH, f"{result_directory}_clean", "biweekly_results"))  # biweekly
             os.mkdir(os.path.join(DATA_PATH, f"{result_directory}_clean", "monthly_results"))  # Monthly
 
-        else:  # Check if this step has already been computed
-            print(f"> Results for {result_directory}_clean already computed")
-            continue
-
         # Check detected errors in output files
         project_list = os.listdir(os.path.join(DATA_PATH, result_directory, f"{periodicity_level}_results"))
         periodicity_results_dir = os.path.join(DATA_PATH, result_directory, f"{periodicity_level}_results")
 
         # Generate clean output files
         clean_output_path = os.path.join(DATA_PATH, f"{result_directory}_clean", f"{periodicity_level}_results")
+        clean_dict = {col: [] for col in FINAL_TS_TABLE_COLS}
 
         for i in range(len(project_list)):
             project_name = project_list[i][:-4]
@@ -49,26 +46,26 @@ def check_results(periodicity_level):
             if results_cols != FINAL_TS_TABLE_COLS:
                 df.columns = FINAL_TS_TABLE_COLS
 
-            # Check length of the df, should be one project per csv
-            if len(df) != 1:
-                model_name_col = df['PROJECT']
-                model_idx = list(model_name_col).index(project_name)
-                output_row = df.loc[model_idx, :]
-                # We overwrite the existing output
-                if not os.path.exists(os.path.join(DATA_PATH, f"{result_directory}_clean")):
-                    os.mkdir(os.path.join(DATA_PATH, f"{result_directory}_clean"))
-                output_df = pd.DataFrame(output_row).T  # We transpose the pandas series to make it a single row
-                output_df.to_csv(os.path.join(clean_output_path, project_list[i]),
-                                  mode='w', index=False)
-            else:
-                df.to_csv(os.path.join(clean_output_path, project_list[i]), index=False)
+            # Check length of the df, should be one project per csv, the correct df should work with this logic too.
+            model_name_col = df['PROJECT']
+            model_idx = list(model_name_col).index(project_name)
+            output_row = df.loc[model_idx, :]
+            for j in range(len(FINAL_TS_TABLE_COLS)):
+                clean_dict[FINAL_TS_TABLE_COLS[j]].append(output_row[j])
 
             print("> Project [{}] cleaned for model results [{}] - {}/{}".format(project_name,
-                                                                               result_directory,
-                                                                               i+1, len(project_list)))
+                                                                                 result_directory,
+                                                                                 i+1, len(project_list)))
+
+        # We merge all the outputs
+        if not os.path.exists(os.path.join(DATA_PATH, f"{result_directory}_clean")):
+            os.mkdir(os.path.join(DATA_PATH, f"{result_directory}_clean"))
+
+        output_df = pd.DataFrame.from_dict(clean_dict)
+        output_df.to_csv(os.path.join(clean_output_path, 'assessment.csv'), mode='w', index=False)
 
 
-def merge_ml(periodicity):
+def merge_ml(periodicity, missing_values):
     """
     Merges the results from the completed
     """
@@ -83,9 +80,13 @@ def merge_ml(periodicity):
         model = models_list[i]
         model_path = os.path.join(ml_results_path, model, periodicity)
         assessment_df = pd.read_csv(os.path.join(model_path, 'assessment.csv'))
+
+        # NOTE: We filter out the rows of the projects which couldn't get calculated with the time series approach
+        assessment_df = assessment_df[~assessment_df['PROJECT'].isin(missing_values)]
+
         final_format_dict['Approach'].append(model)
         if periodicity == 'complete':
-            if model is 'svr' or model is 'xgb' or model is 'rf':
+            if model == 'svr' or model == 'xgb' or model == 'rf':
                 final_format_dict['Type'].append('NL')
             else:
                 final_format_dict['Type'].append('L')
@@ -117,64 +118,84 @@ def save_results(latex, df, file_name):
         transform_to_latex(os.path.join(DATA_PATH, 'final_results', file_name))
 
 
-def merge_all(periodicity_level):
+def merge_all(periodicity_level, missing_values):
     """
     Merges the biweekly and monthly results from all the implemented models in the concerning project
     """
 
     result_directories = ['sarimax_results_clean', 'arimax_results_clean', 'sarima_lm_results_clean',
-                          'arima_lm_results_clean', 'results/resuls_ML_sarimax']
+                          'arima_lm_results_clean', 'results/results_ML_sarimax']
     final_results_dict = {col: [] for col in final_table_columns}
 
     for j in range(len(result_directories)):
         result_directory = result_directories[j]
-        if result_directory is 'results/resuls_ML_sarimax':
+
+        # If the results have been performed by non TD models.
+        if result_directory is 'results/results_ML_sarimax':
 
             # For the given periodicity, check for the approach the obtained results pero project
-            prov_df_dict = merge_ml(periodicity=periodicity_level)
+            prov_df_dict = merge_ml(periodicity=periodicity_level, missing_values=missing_values)
 
-            # Store the avg values in the final results dict.
-            final_results_dict['Approach'].append(result_directory)
-            final_results_dict['Type'].append('~TD')
-            final_results_dict['MAPE'].append(round(mean(prov_df_dict['MAPE']), 2))
-            final_results_dict['MAE'].append(round(mean(prov_df_dict['MAE']), 2))
-            final_results_dict['MSE'].append(round(mean(prov_df_dict['MSE']), 2))
-            final_results_dict['RMSE'].append(round(mean(prov_df_dict['RMSE']), 2))
+            models = prov_df_dict['Approach']
+
+            for i in range(len(models)):
+
+                # Store the avg values in the final results dict.
+                final_results_dict['Approach'].append(models[i])
+                final_results_dict['Type'].append('~TD')
+                final_results_dict['MAPE'].append(prov_df_dict['MAPE'][i])
+                final_results_dict['MAE'].append(prov_df_dict['MAE'][i])
+                final_results_dict['MSE'].append(prov_df_dict['MSE'][i])
+                final_results_dict['RMSE'].append(prov_df_dict['RMSE'][i])
 
         else:
 
-            # For the given periodicity, check for the approach the obtained results pero project
-            prov_df_dict = {col: [] for col in assessment_statistics}
+            # For the given periodicity, check for the approach the obtained results per project
             project_results_dir_path = os.path.join(DATA_PATH, result_directory, f"{periodicity_level}_results")
-            project_results_files = os.listdir(project_results_dir_path)
-            for i in range(len(project_results_files)):
-                project_results_file = project_results_files[i]
-                file_df = pd.read_csv(os.path.join(project_results_dir_path, project_results_file))
-                prov_df_dict['PROJECT'].append(file_df['PROJECT'][0])
-                prov_df_dict['MAPE'].append(file_df['MAPE'][0])
-                prov_df_dict['MAE'].append(file_df['MAE'][0])
-                prov_df_dict['MSE'].append(file_df['MSE'][0])
-                prov_df_dict['RMSE'].append(file_df['RMSE'][0])
+            assessment_df = pd.read_csv(os.path.join(project_results_dir_path, "assessment.csv"))
 
-                print(f"> PROJECT: {project_results_file} results added to common path - {i+1}/{len(project_results_files)}")
+            # NOTE: We filter out the rows of the projects which couldn't get calculated with the time series approach
+            assessment_df = assessment_df[~assessment_df['PROJECT'].isin(missing_values)]
 
             # Store the avg values in the final results dict.
             if result_directory is "sarimax_results_clean" or result_directory is "sarima_lm_results_clean":
                 final_results_dict['Type'].append('STD')
             else:
                 final_results_dict['Type'].append('TD')
-            final_results_dict['Approach'].append(result_directory)
-            final_results_dict['MAPE'].append(round(mean(prov_df_dict['MAPE']), 2))
-            final_results_dict['MAE'].append(round(mean(prov_df_dict['MAE']), 2))
-            final_results_dict['MSE'].append(round(mean(prov_df_dict['MSE']), 2))
-            final_results_dict['RMSE'].append(round(mean(prov_df_dict['RMSE']), 2))
+
+            final_results_dict['Approach'].append(result_directory[:-6])
+            final_results_dict['MAPE'].append(round(assessment_df['MAPE'].mean(), 2))
+            final_results_dict['MAE'].append(round(assessment_df['MAE'].mean(), 2))
+            final_results_dict['MSE'].append(round(assessment_df['MSE'].mean(), 2))
+            final_results_dict['RMSE'].append(round(assessment_df['RMSE'].mean(), 2))
 
         print(f"> Final results file generated for approach {result_directory} - {j+1}/{len(result_directories)}")
 
     return pd.DataFrame.from_dict(final_results_dict)
 
 
-def merge_results(periodicity_level):
+def check_missing_results(periodicity_level):
+    """
+    Checks the existing missing values from errors in the calculations of the TS models
+    """
+
+    result_directories = ['sarimax_results_clean', 'arimax_results_clean', 'sarima_lm_results_clean',
+                          'arima_lm_results_clean']
+
+    missing_val_list = []
+
+    for result_directory in result_directories:
+        result_path = os.path.join(DATA_PATH, result_directory, f"{periodicity_level}_results")
+        results_df = pd.read_csv(os.path.join(result_path, 'assessment.csv'))
+        null_mask = results_df.isnull().any(axis=1)
+        null_rows = results_df[null_mask]
+        missing_val_list.extend(list(null_rows['PROJECT']))
+
+    missing_val_list = list(set(missing_val_list))  # Get only unique values
+    return missing_val_list
+
+
+def merge_results(periodicity_level, missing_values):
     """
     Merges the results of the used models into the aggregated values for global comparison anchored to the according
     periodicity level
@@ -183,12 +204,13 @@ def merge_results(periodicity_level):
     if periodicity_level == "complete":  # Meaning that the data has only been processed by ML models.
 
         # We deal with the complete data separately as we only need the averages of the ML models
-        results_complete_df = merge_ml(periodicity=periodicity_level)
-        save_results(latex=True, df=results_complete_df, file_name="original_data_results.csv")
+        # ALso, we do not consider missing values in this case as there is no TS model to compare
+        results_complete_df = merge_ml(periodicity=periodicity_level, missing_values=[])
+        save_results(latex=True, df=results_complete_df, file_name="complete_data_results.csv")
 
     else:
 
-        results_df = merge_all(periodicity_level=periodicity_level)
+        results_df = merge_all(periodicity_level=periodicity_level, missing_values=missing_values)
         save_results(latex=True, df=results_df, file_name=f"{periodicity_level}_data_results.csv")
 
 
@@ -204,15 +226,23 @@ def combine_results():
     """
 
     periodicity_levels = ['biweekly', 'monthly', 'complete']
-
     if not os.path.exists(os.path.join(DATA_PATH, 'final_results')):
         os.mkdir(os.path.join(DATA_PATH, 'final_results'))
 
     # merge_outcomes into biweekly data, monthly and complete data
     for periodicity in periodicity_levels:
         print(f"> Processing periodicity level = {periodicity}")
-        check_results(periodicity_level=periodicity)
-        merge_results(periodicity_level=periodicity)
+
+        if not periodicity == 'complete':
+            check_results(periodicity_level=periodicity)
+            # For the calculations we only consider the non-missing projects
+            missing_projects = check_missing_results(periodicity_level=periodicity)
+
+        # Merge all the results into combined result df
+        merge_results(periodicity_level=periodicity, missing_values=missing_projects)
+
+        # Merge all ts results into a single df
+        # merge_ts_results()
 
     # Visualization stage
     # 1. Comparison among Seasonal Time Series and non-seasonal time series. (bar plots)
