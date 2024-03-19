@@ -6,8 +6,8 @@ final_table_columns = ['Approach', 'Type', 'MAPE (%)', 'MAE', 'MSE', 'RMSE']
 FINAL_TS_TABLE_COLS = ["PROJECT", "MAPE", "MSE", "MAE", "RMSE", "AIC", "BIC"]
 
 # Flag values for process control of the project
-SARIMAX = True
+SARIMAX = False
 RELATED_WORK = False
 ML_MODELS = False
-COMBINE_RESULTS = False
+COMBINE_RESULTS = True
 VISUALIZE = False

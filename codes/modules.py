@@ -123,7 +123,7 @@ def transform_to_latex(df_path):
     latex_df = df.to_latex(index=False)
     results_type = df_path.split('/')[-1][:-4]
     file_tex = results_type + '.tex'
-    file_path = os.path.join(DATA_PATH, file_tex)
+    file_path = os.path.join(DATA_PATH, 'final_results', file_tex)
     with open(file_path, 'w') as f:
         f.write(latex_df)
     f.close()
