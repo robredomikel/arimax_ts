@@ -2,12 +2,62 @@
 Combines the needed results into aggregated values for global comparison
 """
 
-from commons import DATA_PATH, assessment_statistics, final_table_columns
+from commons import DATA_PATH, assessment_statistics, final_table_columns, FINAL_TS_TABLE_COLS
 from modules import transform_to_latex
 
 import pandas as pd
 import os
 from statistics import mean
+
+
+def check_results(periodicity_level):
+    """
+    Checks the format of the results obtain for each model in the provided periodicity level.
+    NOTE: Only works for TS approaches
+    :param periodicity_level: Given periodicity to examine
+    """
+
+    result_directories = ['sarimax_results', 'arimax_results', 'sarima_lm_results',
+                          'arima_lm_results', 'results/resuls_ML_sarimax']
+
+    for result_directory in result_directories:
+
+        # Check detected errors in output files
+        project_list = os.listdir(os.path.join(DATA_PATH, result_directory))
+        for i in range(len(project_list)):
+            project_name = project_list[i][:-4]
+            project_path = os.path.join(DATA_PATH, result_directory, project_list[i])
+            df = pd.read_csv(project_path)
+            results_cols = df.columns.tolist()
+
+            # Check if the results file has the correct column names (due to unknown reasons some files got the names
+            # inside the results)
+            if results_cols != FINAL_TS_TABLE_COLS:
+                df.columns = FINAL_TS_TABLE_COLS
+
+            # Check length of the df, should be one project per csv
+            if len(df) != 1:
+                model_name_col = df['PROJECT']
+                model_idx = model_name_col.get_loc(project_name)
+                output_row = df.loc[model_idx, :]
+                # We overwrite the existing output
+                if not os.path.exists(os.path.join(DATA_PATH, f"{result_directory}_clean")):
+                    os.mkdir(os.path.join(DATA_PATH, f"{result_directory}_clean"))
+                output_row.to_csv(os.path.join(DATA_PATH, f"{result_directory}_clean", project_list[i]),
+                                  mode='w', columns=FINAL_TS_TABLE_COLS, index=False)
+            else:
+                df.to_csv(os.path.join(DATA_PATH, f"{result_directory}_clean", project_list[i]), index=False)
+
+            print("Project [{}] cleaned for model results [{}] - {}/{}".format(project_name,
+                                                                               result_directory,
+                                                                               i+1, len(project_list)))
+
+
+
+
+
+
+
 
 
 def merge_ml(periodicity):
@@ -140,6 +190,7 @@ def combine_results():
     periodicity_levels = ['biweekly', 'monthly', 'complete']
     # merge_outcomes into biweekly data, monthly and complete data
     for periodicity in periodicity_levels:
+        check_results(periodicity_level=periodicity)
         merge_results(periodicity_level=periodicity)
 
     # Visualization stage
