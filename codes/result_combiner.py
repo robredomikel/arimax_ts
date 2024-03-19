@@ -18,15 +18,29 @@ def check_results(periodicity_level):
     """
 
     result_directories = ['sarimax_results', 'arimax_results', 'sarima_lm_results',
-                          'arima_lm_results', 'results/resuls_ML_sarimax']
+                          'arima_lm_results']
 
     for result_directory in result_directories:
 
+        if not os.path.exists(os.path.join(DATA_PATH, f"{result_directory}_clean")):
+            os.mkdir(os.path.join(DATA_PATH, f"{result_directory}_clean"))
+            os.mkdir(os.path.join(DATA_PATH, f"{result_directory}_clean", "biweekly_results"))  # biweekly
+            os.mkdir(os.path.join(DATA_PATH, f"{result_directory}_clean", "monthly_results"))  # Monthly
+
+        else:  # Check if this step has already been computed
+            print(f"> Results for {result_directory}_clean already computed")
+            continue
+
         # Check detected errors in output files
-        project_list = os.listdir(os.path.join(DATA_PATH, result_directory))
+        project_list = os.listdir(os.path.join(DATA_PATH, result_directory, f"{periodicity_level}_results"))
+        periodicity_results_dir = os.path.join(DATA_PATH, result_directory, f"{periodicity_level}_results")
+
+        # Generate clean output files
+        clean_output_path = os.path.join(DATA_PATH, f"{result_directory}_clean", f"{periodicity_level}_results")
+
         for i in range(len(project_list)):
             project_name = project_list[i][:-4]
-            project_path = os.path.join(DATA_PATH, result_directory, project_list[i])
+            project_path = os.path.join(periodicity_results_dir, project_list[i])
             df = pd.read_csv(project_path)
             results_cols = df.columns.tolist()
 
@@ -38,15 +52,16 @@ def check_results(periodicity_level):
             # Check length of the df, should be one project per csv
             if len(df) != 1:
                 model_name_col = df['PROJECT']
-                model_idx = model_name_col.get_loc(project_name)
+                model_idx = list(model_name_col).index(project_name)
                 output_row = df.loc[model_idx, :]
                 # We overwrite the existing output
                 if not os.path.exists(os.path.join(DATA_PATH, f"{result_directory}_clean")):
                     os.mkdir(os.path.join(DATA_PATH, f"{result_directory}_clean"))
-                output_row.to_csv(os.path.join(DATA_PATH, f"{result_directory}_clean", project_list[i]),
-                                  mode='w', columns=FINAL_TS_TABLE_COLS, index=False)
+                output_df = pd.DataFrame(output_row).T  # We transpose the pandas series to make it a single row
+                output_df.to_csv(os.path.join(clean_output_path, project_list[i]),
+                                  mode='w', index=False)
             else:
-                df.to_csv(os.path.join(DATA_PATH, f"{result_directory}_clean", project_list[i]), index=False)
+                df.to_csv(os.path.join(clean_output_path, project_list[i]), index=False)
 
             print("> Project [{}] cleaned for model results [{}] - {}/{}".format(project_name,
                                                                                result_directory,
@@ -76,7 +91,7 @@ def merge_ml(periodicity):
                 final_format_dict['Type'].append('L')
         else:
             final_format_dict['Type'].append('~TD')
-        final_format_dict['MAPE (%)'].append(round(assessment_df['MAPE'].mean(), 2))
+        final_format_dict['MAPE'].append(round(assessment_df['MAPE'].mean(), 2))
         final_format_dict['MAE'].append(round(assessment_df['MAE'].mean(), 2))
         final_format_dict['MSE'].append(round(assessment_df['MSE'].mean(), 2))
         final_format_dict['RMSE'].append(round(assessment_df['RMSE'].mean(), 2))
@@ -99,7 +114,7 @@ def save_results(latex, df, file_name):
     df.to_csv(os.path.join(DATA_PATH, 'final_results', file_name), index=False)
     # 2. Store into latex format
     if latex:
-        transform_to_latex(os.path.join(DATA_PATH, file_name))
+        transform_to_latex(os.path.join(DATA_PATH, 'final_results', file_name))
 
 
 def merge_all(periodicity_level):
@@ -121,7 +136,7 @@ def merge_all(periodicity_level):
             # Store the avg values in the final results dict.
             final_results_dict['Approach'].append(result_directory)
             final_results_dict['Type'].append('~TD')
-            final_results_dict['MAPE (%)'].append(round(mean(prov_df_dict['MAPE']), 2))
+            final_results_dict['MAPE'].append(round(mean(prov_df_dict['MAPE']), 2))
             final_results_dict['MAE'].append(round(mean(prov_df_dict['MAE']), 2))
             final_results_dict['MSE'].append(round(mean(prov_df_dict['MSE']), 2))
             final_results_dict['RMSE'].append(round(mean(prov_df_dict['RMSE']), 2))
@@ -136,20 +151,20 @@ def merge_all(periodicity_level):
                 project_results_file = project_results_files[i]
                 file_df = pd.read_csv(os.path.join(project_results_dir_path, project_results_file))
                 prov_df_dict['PROJECT'].append(file_df['PROJECT'][0])
-                prov_df_dict['MAPE'].append(file_df['MAPE'][1])
-                prov_df_dict['MAE'].append(file_df['MAE'][2])
-                prov_df_dict['MSE'].append(file_df['MSE'][3])
-                prov_df_dict['RMSE'].append(file_df['RMSE'][4])
+                prov_df_dict['MAPE'].append(file_df['MAPE'][0])
+                prov_df_dict['MAE'].append(file_df['MAE'][0])
+                prov_df_dict['MSE'].append(file_df['MSE'][0])
+                prov_df_dict['RMSE'].append(file_df['RMSE'][0])
 
                 print(f"> PROJECT: {project_results_file} results added to common path - {i+1}/{len(project_results_files)}")
 
             # Store the avg values in the final results dict.
-            if result_directory is "sarimax_results" or result_directory is "sarima_lm_results":
+            if result_directory is "sarimax_results_clean" or result_directory is "sarima_lm_results_clean":
                 final_results_dict['Type'].append('STD')
             else:
                 final_results_dict['Type'].append('TD')
             final_results_dict['Approach'].append(result_directory)
-            final_results_dict['MAPE (%)'].append(round(mean(prov_df_dict['MAPE']), 2))
+            final_results_dict['MAPE'].append(round(mean(prov_df_dict['MAPE']), 2))
             final_results_dict['MAE'].append(round(mean(prov_df_dict['MAE']), 2))
             final_results_dict['MSE'].append(round(mean(prov_df_dict['MSE']), 2))
             final_results_dict['RMSE'].append(round(mean(prov_df_dict['RMSE']), 2))
@@ -195,6 +210,7 @@ def combine_results():
 
     # merge_outcomes into biweekly data, monthly and complete data
     for periodicity in periodicity_levels:
+        print(f"> Processing periodicity level = {periodicity}")
         check_results(periodicity_level=periodicity)
         merge_results(periodicity_level=periodicity)
 
