@@ -48,6 +48,7 @@ def mlr_optimization(y_train, X_train):
     best_aic = model.aic
     best_variables = list(range(X_train.shape[1]))  # List of current variables indexes
 
+    print(f"> Starting parameter optimization for MLR model...")
     # Backward variable elimination based on AIC
     improved = True
     while improved:
@@ -60,6 +61,54 @@ def mlr_optimization(y_train, X_train):
                 best_variables = try_variables  # Don't forget about the first index with the intercept
                 improved = True
 
+            print(f"> Parameter tuning at work - current best vars: {len(best_variables)} | best AIC: {best_aic}\n")
+
+    print(f"> Parameter optimization for MLR model completed - best vars: {len(best_variables)} | best AIC: {best_aic}")
+    # Convert the index into the variable names from the original dataframe to store the variable names in a json file
+    initial_vars = INITIAL_VARS.append(0, 'Intercept')
+    best_var_names = [initial_vars[i-1] for i in best_variables[1:]]  # Adjusting for constant
+    return best_var_names, best_aic, best_variables
+
+
+def L_optimization(y_train, X_train, model_name):
+    """
+    Optimizes Ridge and Lasso model based on manual AIC parameter optimization
+    """
+    # Initial model with all variables
+
+    if model_name == 'L2':  # Ridge
+        model = Ridge(alpha=1.0, max_iter=1000)
+    elif model_name == 'sgd':  # Stochastic Gradient Descent
+        model = SGDRegressor(max_iter=1000, tol=0.0001)
+    else:  # L1 Lasso
+        model = Lasso(alpha=1.0, max_iter=1000)
+    model.fit(X_train, y_train)
+
+    rss_val = RSS(y=y_train, X=X_train[0], model=model)
+    best_aic = AIC(n=X_train.shape[0], k=X_train.shape[1]+1, rss=rss_val)
+    best_variables = list(range(X_train.shape[1]))  # List of current variables indexes
+
+    print(f"> Starting parameter optimization for {model_name} model...")
+    # Backward variable elimination based on AIC
+    improved = True
+    while improved:
+        improved = False
+        for i in best_variables[1:]:  # COnsidering the first one as the intercept
+            try_variables = [v for v in best_variables if v != i]
+            if model_name == 'L2':
+                try_model = Ridge(alpha=1.0, max_iter=1000)
+            else:
+                try_model = Lasso(alpha=1.0, max_iter=1000)
+            try_model.fit(X_train[:, try_variables], y_train)
+            try_rss = RSS(y=y_train, X=X_train[0], model=try_model)
+            try_aic = AIC(n=X_train.shape[0], k=len(try_variables)+1, rss=try_rss)
+            if try_aic < best_aic:
+                best_aic = try_aic
+                best_variables = try_variables  # Don't forget about the first index with the intercept
+                improved = True
+            print(f"> Parameter tuning at work - current best vars: {len(best_variables)} | best AIC: {best_aic}\n")
+
+    print(f"> Parameter optimization for {model_name} model completed - best vars: {len(best_variables)} | best AIC: {best_aic}")
     # Convert the index into the variable names from the original dataframe to store the variable names in a json file
     initial_vars = INITIAL_VARS.append(0, 'Intercept')
     best_var_names = [initial_vars[i-1] for i in best_variables[1:]]  # Adjusting for constant
@@ -117,6 +166,7 @@ def mlr_regression(training_df, testing_df, pro_name, periodicity):
         # Update the training data
         X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
         y_train = np.append(y_train, y_test[i])  # Rows
+        print(f"> MLR testing process for project {pro_name} - {i+1}/{len(y_test)}")
 
     print(f"> PROCESSED Multivariate Linear Regression for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
@@ -169,51 +219,10 @@ def svm_regression(training_df, testing_df, pro_name, periodicity):
         # Update the training data
         X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
         y_train = np.append(y_train, y_test[i])  # Rows
+        print(f"> SVM testing process for project {pro_name} - {i+1}/{len(y_test)}")
 
     print(f"> PROCESSED Support Vector Machine Regression for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
-
-
-def L_optimization(y_train, X_train, model_name):
-    """
-    Optimizes Ridge and Lasso model based on manual AIC parameter optimization
-    """
-    # Initial model with all variables
-
-    if model_name == 'L2':  # Ridge
-        model = Ridge(alpha=1.0, max_iter=1000)
-    elif model_name == 'sgd':  # Stochastic Gradient Descent
-        model = SGDRegressor(max_iter=1000, tol=0.0001)
-    else:  # L1 Lasso
-        model = Lasso(alpha=1.0, max_iter=1000)
-    model.fit(X_train, y_train)
-
-    rss_val = RSS(y=y_train, X=X_train[0], model=model)
-    best_aic = AIC(n=X_train.shape[0], k=X_train.shape[1]+1, rss=rss_val)
-    best_variables = list(range(X_train.shape[1]))  # List of current variables indexes
-
-    # Backward variable elimination based on AIC
-    improved = True
-    while improved:
-        improved = False
-        for i in best_variables[1:]:  # COnsidering the first one as the intercept
-            try_variables = [v for v in best_variables if v != i]
-            if model_name == 'L2':
-                try_model = Ridge(alpha=1.0, max_iter=1000)
-            else:
-                try_model = Lasso(alpha=1.0, max_iter=1000)
-            try_model.fit(X_train[:, try_variables], y_train)
-            try_rss = RSS(y=y_train, X=X_train[0], model=try_model)
-            try_aic = AIC(n=X_train.shape[0], k=len(try_variables)+1, rss=try_rss)
-            if try_aic < best_aic:
-                best_aic = try_aic
-                best_variables = try_variables  # Don't forget about the first index with the intercept
-                improved = True
-
-    # Convert the index into the variable names from the original dataframe to store the variable names in a json file
-    initial_vars = INITIAL_VARS.append(0, 'Intercept')
-    best_var_names = [initial_vars[i-1] for i in best_variables[1:]]  # Adjusting for constant
-    return best_var_names, best_aic, best_variables
 
 
 def ridge_regression(training_df, testing_df, pro_name, periodicity):
@@ -265,6 +274,7 @@ def ridge_regression(training_df, testing_df, pro_name, periodicity):
         # Update the training data
         X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
         y_train = np.append(y_train, y_test[i])  # Rows
+        print(f"> L2 testing process for project {pro_name} - {i+1}/{len(y_test)}")
 
     print(f"> PROCESSED L2 Ridge Regression for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
@@ -318,6 +328,7 @@ def lasso_regression(training_df, testing_df, pro_name, periodicity):
         # Update the training data
         X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
         y_train = np.append(y_train, y_test[i])  # Rows
+        print(f"> L1 testing process for project {pro_name} - {i+1}/{len(y_test)}")
 
     print(f"> PROCESSED L1 Lasso Regression for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
@@ -350,6 +361,7 @@ def xgb_optimization(y_train, X_train, y_test, X_test):
     # Backward variable elimination based on AIC
     # Backward variable elimination based on AIC
     improved = True
+    print(f"> Starting parameter optimization for XGB model...")
     while improved:
         improved = False
         for i in best_variables[1:]:  # COnsidering the first one as the intercept
@@ -376,7 +388,9 @@ def xgb_optimization(y_train, X_train, y_test, X_test):
                 best_mae = try_mae
                 best_variables = try_variables  # Don't forget about the first index with the intercept
                 improved = True
+            print(f"> Parameter tuning at work - current best vars: {len(best_variables)} | best AIC: {best_mae}\n")
 
+    print(f"> Parameter optimization for MLR model completed - best vars: {len(best_variables)} | best AIC: {best_mae}")
     # Convert the index into the variable names from the original dataframe to store the variable names in a json file
     best_var_names = [INITIAL_VARS[i] for i in best_variables]  # Adjusting for constant
     return best_var_names, best_mae, best_variables
@@ -395,6 +409,7 @@ def rf_optimization(y_train, X_train, y_test, X_test):
 
     # Backward variable elimination based on AIC
     improved = True
+    print(f"> Starting parameter optimization for RF model...")
     while improved:
         improved = False
         for i in best_variables[1:]:  # COnsidering the first one as the intercept
@@ -407,7 +422,9 @@ def rf_optimization(y_train, X_train, y_test, X_test):
                 best_mae = try_mae
                 best_variables = try_variables  # Don't forget about the first index with the intercept
                 improved = True
+            print(f"> Parameter tuning at work - current best vars: {len(best_variables)} | best AIC: {best_mae}\n")
 
+    print(f"> Parameter optimization for RF model completed - best vars: {len(best_variables)} | best AIC: {best_mae}")
     # Convert the index into the variable names from the original dataframe to store the variable names in a json file
     best_var_names = [INITIAL_VARS[i] for i in best_variables]
     return best_var_names, best_mae, best_variables
@@ -424,6 +441,7 @@ def svr_optimization(y_train, X_train, y_test, X_test):
     best_variables = list(range(X_train.shape[1]))  # List of current variables indexes
 
     # Backward variable elimination based on AIC
+    print(f"> Starting parameter optimization for SVR model...")
     improved = True
     while improved:
         improved = False
@@ -437,7 +455,9 @@ def svr_optimization(y_train, X_train, y_test, X_test):
                 best_mae = try_mae
                 best_variables = try_variables  # Don't forget about the first index with the intercept
                 improved = True
+            print(f"> Parameter tuning at work - current best vars: {len(best_variables)} | best AIC: {best_mae}\n")
 
+    print(f"> Parameter optimization for MLR model completed - best vars: {len(best_variables)} | best AIC: {best_mae}")
     # Convert the index into the variable names from the original dataframe to store the variable names in a json file
     best_var_names = [INITIAL_VARS[i] for i in best_variables]
     return best_var_names, best_mae, best_variables
@@ -512,6 +532,7 @@ def xgboost(training_df, testing_df, pro_name, periodicity):
         # Update the training data
         X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
         y_train = np.append(y_train, y_test[i])  # Rows
+        print(f"> XGBoost testing process for project {pro_name} - {i+1}/{len(y_test)}")
 
     print(f"> PROCESSED XGBoost for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
@@ -559,6 +580,7 @@ def rf_forest(training_df, testing_df, pro_name, periodicity):
         # Update the training data
         X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
         y_train = np.append(y_train, y_test[i])  # Rows
+        print(f"> RF testing process for project {pro_name} - {i+1}/{len(y_test)}")
 
     print(f"> PROCESSED Random Forest Regression for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
@@ -612,6 +634,7 @@ def sgd_regression(training_df, testing_df, pro_name, periodicity):
         # Update the training data
         X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
         y_train = np.append(y_train, y_test[i])  # Rows
+        print(f"> SGD testing process for project {pro_name} - {i+1}/{len(y_test)}")
 
     print(f"> PROCESSED Stochastic Gradient Descent for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)

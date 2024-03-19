@@ -10,6 +10,6 @@ INITIAL_VARS = ['S1213', 'RedundantThrowsDeclarationCheck', 'S00117', 'S00122', 
 # Flag values for process control of the project
 SARIMAX = False
 RELATED_WORK = False
-ML_MODELS = False
-COMBINE_RESULTS = True
+ML_MODELS = True
+COMBINE_RESULTS = False
 VISUALIZE = False
