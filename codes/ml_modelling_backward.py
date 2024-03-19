@@ -1,5 +1,5 @@
 from modules import assessmentMetrics, check_encoding, change_encoding, detect_existing_output
-from commons import DATA_PATH, assessment_statistics
+from commons import DATA_PATH, assessment_statistics, INITIAL_VARS
 
 import pandas as pd
 import numpy as np
@@ -11,6 +11,52 @@ from sklearn.ensemble import RandomForestRegressor
 import os
 import xgboost as xgb
 import statsmodels.api as sm
+import json
+
+
+def parameter_store_json(best_var_names, best_metric, pro_name, metric_name):
+    """
+    Stores the best model parameters into a json file
+    """
+    best_variables_path = os.path.join(DATA_PATH, f"{pro_name}_best_variables.json")
+    json_dict = {"best_var_names": best_var_names, "best_aic": best_metric}
+
+    with open(best_variables_path, 'w') as f:
+        json.dump(json_dict, f)
+
+    print(f"> Best parameter combination and AIC for project {pro_name}\n")
+    if metric_name == "aic":
+        print(f"> Best AIC: {best_metric}\n")
+    else:
+        print(f"> Best MAE: {best_metric}\n")
+    print(f"> Best parameters: {best_var_names}")
+
+
+def mlr_optimization(y_train, X_train):
+    """
+    Optimizes MLR model based on AIC parameter optimization
+    """
+    # Initial model with all variables
+    model = sm.OLS(endog=y_train, exog=X_train).fit()
+    best_aic = model.aic
+    best_variables = list(range(X_train.shape[1]))  # List of current variables indexes
+
+    # Backward variable elimination based on AIC
+    improved = True
+    while improved:
+        improved = False
+        for i in best_variables[1:]:  # COnsidering the first one as the intercept
+            try_variables = [v for v in best_variables if v != i]
+            try_model = sm.OLS(endog=y_train, exog=X_train[:, try_variables]).fit()
+            if try_model.aic < best_aic:
+                best_aic = try_model.aic
+                best_variables = try_variables  # Don't forget about the first index with the intercept
+                improved = True
+
+    # Convert the index into the variable names from the original dataframe to store the variable names in a json file
+    initial_vars = INITIAL_VARS.append(0, 'Intercept')
+    best_var_names = [initial_vars[i-1] for i in best_variables[1:]]  # Adjusting for constant
+    return best_var_names, best_aic, best_variables
 
 
 def mlr_regression(training_df, testing_df, pro_name, periodicity):
@@ -45,12 +91,18 @@ def mlr_regression(training_df, testing_df, pro_name, periodicity):
     # Explicitly adding the intercept of the Linear Regression
     X_test = np.concatenate((constant_test, X_test_scaled), axis=1)
 
+    # Backward parameter optimization
+    best_var_names, best_aic, best_var_indices = mlr_optimization(y_train=y_train, X_train=X_train)
+    # Save it into json
+    parameter_store_json(best_var_names=best_var_names, best_metric=best_aic, pro_name=pro_name, metric_name='aic')
+
+    # Walk Forward train test validation
     for i in range(len(y_test)):
 
-        model = sm.OLS(y_train, X_train).fit()
+        model = sm.OLS(y_train, X_train[:, best_var_indices]).fit()
 
         # New observation for prediction
-        new_observation = X_test[i:i+1, :]
+        new_observation = X_test[i:i+1, best_var_indices]
         prediction = model.predict(new_observation)
         predictions.append(np.take(prediction, 0))
 
