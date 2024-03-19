@@ -8,6 +8,26 @@ import pandas as pd
 from commons import DATA_PATH
 
 
+def RSS(y, X, model):
+    """
+    Theoretical calculation of RSS
+    :param y: dependent variable vector
+    :param X: Independent variables matrix
+    :param model: regression model included
+    """
+    return np.sum((y - model.predict(X))**2)
+
+
+def AIC(n, k, rss):
+    """
+    Theoretical calculation of AIC
+    :param n: number of matrix rows
+    :param k: number of model parameters (intercept included)
+    :param rss: RSS value from the fitted model
+    """
+    return n * np.log(rss/n) + 2 * k
+
+
 def detect_existing_output(project, paths, flag_num, files_num, approach):
 
     monthly_results_path = paths[0]

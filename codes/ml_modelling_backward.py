@@ -1,4 +1,4 @@
-from modules import assessmentMetrics, check_encoding, change_encoding, detect_existing_output
+from modules import assessmentMetrics, check_encoding, change_encoding, detect_existing_output, RSS, AIC, MAE
 from commons import DATA_PATH, assessment_statistics, INITIAL_VARS
 
 import pandas as pd
@@ -14,11 +14,18 @@ import statsmodels.api as sm
 import json
 
 
-def parameter_store_json(best_var_names, best_metric, pro_name, metric_name):
+def parameter_store_json(best_var_names, best_metric, pro_name, metric_name, model_name):
     """
     Stores the best model parameters into a json file
     """
-    best_variables_path = os.path.join(DATA_PATH, f"{pro_name}_best_variables.json")
+
+    ml_model_path = os.path.join(DATA_PATH, "best_ml_model_params")
+    if not os.path.exists(ml_model_path):
+        os.mkdir(ml_model_path)
+    ml_spec_path = os.path.join(ml_model_path, model_name)
+    if not os.path.exists(ml_spec_path):
+        os.mkdir(ml_spec_path)
+    best_variables_path = os.path.join(ml_model_path, f"{pro_name}_best_variables.json")
     json_dict = {"best_var_names": best_var_names, "best_aic": best_metric}
 
     with open(best_variables_path, 'w') as f:
@@ -94,7 +101,8 @@ def mlr_regression(training_df, testing_df, pro_name, periodicity):
     # Backward parameter optimization
     best_var_names, best_aic, best_var_indices = mlr_optimization(y_train=y_train, X_train=X_train)
     # Save it into json
-    parameter_store_json(best_var_names=best_var_names, best_metric=best_aic, pro_name=pro_name, metric_name='aic')
+    parameter_store_json(best_var_names=best_var_names, best_metric=best_aic, pro_name=pro_name, metric_name='aic',
+                         model_name='mlr')
 
     # Walk Forward train test validation
     for i in range(len(y_test)):
@@ -158,6 +166,46 @@ def svm_regression(training_df, testing_df, pro_name, periodicity):
     return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
 
 
+def L_optimization(y_train, X_train, model_name):
+    """
+    Optimizes Ridge and Lasso model based on manual AIC parameter optimization
+    """
+    # Initial model with all variables
+
+    if model_name == 'L2':  # Ridge
+        model = Ridge(alpha=1.0, max_iter=1000)
+    else:  # L1 Lasso
+        model = Lasso(alpha=1.0, max_iter=1000)
+    model.fit(X_train, y_train)
+
+    rss_val = RSS(y=y_train, X=X_train[0], model=model)
+    best_aic = AIC(n=X_train.shape[0], k=X_train.shape[1]+1, rss=rss_val)
+    best_variables = list(range(X_train.shape[1]))  # List of current variables indexes
+
+    # Backward variable elimination based on AIC
+    improved = True
+    while improved:
+        improved = False
+        for i in best_variables[1:]:  # COnsidering the first one as the intercept
+            try_variables = [v for v in best_variables if v != i]
+            if model_name == 'L2':
+                try_model = Ridge(alpha=1.0, max_iter=1000)
+            else:
+                try_model = Lasso(alpha=1.0, max_iter=1000)
+            try_model.fit(X_train[:, try_variables], y_train)
+            try_rss = RSS(y=y_train, X=X_train[0], model=try_model)
+            try_aic = AIC(n=X_train.shape[0], k=len(try_variables)+1, rss=try_rss)
+            if try_aic < best_aic:
+                best_aic = try_aic
+                best_variables = try_variables  # Don't forget about the first index with the intercept
+                improved = True
+
+    # Convert the index into the variable names from the original dataframe to store the variable names in a json file
+    initial_vars = INITIAL_VARS.append(0, 'Intercept')
+    best_var_names = [initial_vars[i-1] for i in best_variables[1:]]  # Adjusting for constant
+    return best_var_names, best_aic, best_variables
+
+
 def ridge_regression(training_df, testing_df, pro_name, periodicity):
     """
     Performs the L2 Ridge regression on the provided project.
@@ -188,13 +236,19 @@ def ridge_regression(training_df, testing_df, pro_name, periodicity):
     # Explicitly adding the intercept of the Linear Regression
     X_test = np.concatenate((constant_test, X_test_scaled), axis=1)
 
+    # Backward parameter optimization
+    best_var_names, best_aic, best_var_indices = L_optimization(y_train=y_train, X_train=X_train, model_name='L2')
+    # Save it into json
+    parameter_store_json(best_var_names=best_var_names, best_metric=best_aic, pro_name=pro_name, metric_name='aic',
+                         model_name='L2')
+
     predictions = np.empty(len(X_test))
 
     for i in range(len(y_test)):
-        model = Ridge(alpha=1.0, max_iter=10000)
-        model.fit(X_train, y_train)
+        model = Ridge(alpha=1.0, max_iter=1000)
+        model.fit(X_train[:, best_var_indices], y_train)
 
-        new_observation = X_test[i:i+1, :]
+        new_observation = X_test[i:i+1, best_var_indices]
         prediction = model.predict(new_observation)
         predictions[i] = np.take(prediction, 0)
 
@@ -235,13 +289,19 @@ def lasso_regression(training_df, testing_df, pro_name, periodicity):
     # Explicitly adding the intercept of the Linear Regression
     X_test = np.concatenate((constant_test, X_test_scaled), axis=1)
 
+    # Backward parameter optimization
+    best_var_names, best_aic, best_var_indices = L_optimization(y_train=y_train, X_train=X_train, model_name='L1')
+    # Save it into json
+    parameter_store_json(best_var_names=best_var_names, best_metric=best_aic, pro_name=pro_name, metric_name='aic',
+                         model_name='L1')
+
     predictions = np.empty(len(y_test))
 
     for i in range(len(X_test)):
-        model = Lasso(alpha=1.0, max_iter=10000)
-        model.fit(X_train, y_train)
+        model = Lasso(alpha=1.0, max_iter=1000)
+        model.fit(X_train[:, best_var_indices], y_train)
 
-        new_observation = X_test[i:i+1, :]
+        new_observation = X_test[i:i+1, best_var_indices]
         prediction = model.predict(new_observation)
         predictions[i] = np.take(prediction, 0)
 
@@ -251,6 +311,91 @@ def lasso_regression(training_df, testing_df, pro_name, periodicity):
 
     print(f"> PROCESSED L1 Lasso Regression for project {pro_name} - periodicity: [{periodicity}]")
     return assessmentMetrics(predicted_vals=predictions, testing_vals=y_test, pro_name=pro_name)
+
+
+def xgb_optimization(y_train, X_train, y_test, X_test):
+    """
+    Optimizes parameter selection for xgboost model
+    """
+
+    # Using DMatrix for train and test with xgb package.
+    dtrain = xgb.DMatrix(X_train, label=y_train)
+    dtest = xgb.DMatrix(X_test, label=y_test)
+
+    # Define model params
+    params = {
+        "max_depth": 3,
+        "eta": 0.1,
+        "objective": "reg:squarederror",
+        "eval_metric": "rmse"
+    }
+
+    # Model metric
+    watchlist = [(dtrain, "train"), (dtest, "test")]
+    model = xgb.train(params, dtrain, num_boost_round=500, evals=watchlist, early_stopping_rounds=100, verbose_eval=False)
+
+    predictions_init = model.predict(dtest)
+    best_mae = MAE(predicted_vals=predictions_init, testing_vals=y_test)
+    best_variables = list(range(X_train.shape[1])) # List of current variables indexes
+    # Backward variable elimination based on AIC
+    # Backward variable elimination based on AIC
+    improved = True
+    while improved:
+        improved = False
+        for i in best_variables[1:]:  # COnsidering the first one as the intercept
+            try_variables = [v for v in best_variables if v != i]
+            # Using DMatrix for train and test with xgb package.
+            try_dtrain = xgb.DMatrix(X_train[:, try_variables], label=y_train)
+            try_dtest = xgb.DMatrix(X_test[:, try_variables], label=y_test)
+
+            # Define model params
+            try_params = {
+                "max_depth": 3,
+                "eta": 0.1,
+                "objective": "reg:squarederror",
+                "eval_metric": "rmse"
+            }
+
+            # Model metric
+            try_watchlist = [(try_dtrain, "train"), (try_dtest, "test")]
+            try_model = xgb.train(try_params, try_dtrain, num_boost_round=500, evals=try_watchlist, early_stopping_rounds=100, verbose_eval=False)
+
+            try_predictions = try_model.predict(try_dtest)
+            try_mae = MAE(predicted_vals=try_predictions, testing_vals=y_test)
+            if try_mae < best_mae:
+                best_mae = try_mae
+                best_variables = try_variables  # Don't forget about the first index with the intercept
+                improved = True
+
+    # Convert the index into the variable names from the original dataframe to store the variable names in a json file
+    best_var_names = [INITIAL_VARS[i] for i in best_variables]  # Adjusting for constant
+    return best_var_names, best_mae, best_variables
+
+
+def rf_optimization(y_train, X_train, y_test, X_test):
+    """
+    Optimizes parameter selection for random forest model
+    """
+
+
+
+def nl_optimization(y_train, X_train, y_test, X_test, model_name):
+    """
+    Performs parameter optimization for non-linear regression ML models, which require use of the whole test set
+    :param y_train: as name says
+    :param X_train: as name says
+    :param model_name: as name says
+    """
+
+    if model_name == 'xgb':  # XGBoost
+        best_var_names, best_aic, best_var_indices = xgb_optimization(y_train, X_train, y_test, X_test)
+
+    if model_name == 'rf':  # Random Forest
+        best_var_names, best_aic, best_var_indices = rf_optimization(y_train, X_train, y_test, X_test)
+
+
+
+    return best_var_names, best_aic, best_var_indices
 
 
 def xgboost(training_df, testing_df, pro_name, periodicity):
@@ -273,10 +418,18 @@ def xgboost(training_df, testing_df, pro_name, periodicity):
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
 
+    # Backward parameter optimization
+    best_var_names, best_mae, best_var_indices = nl_optimization(y_train=y_train, X_train=X_train,
+                                                                 y_test=y_test, X_test=X_test,
+                                                                 model_name='xgb')
+    # Save it into json
+    parameter_store_json(best_var_names=best_var_names, best_metric=best_mae, pro_name=pro_name, metric_name='mae',
+                         model_name='xgb')
+
     for i in range(len(y_test)):
         # Using DMatrix for train and test with xgb package.
-        dtrain = xgb.DMatrix(X_train, label=y_train)
-        dtest = xgb.DMatrix(X_test[i:i+1, :].tolist(), label=[y_test[i]])
+        dtrain = xgb.DMatrix(X_train[:, best_var_indices], label=y_train)
+        dtest = xgb.DMatrix(X_test[i:i+1, best_var_indices].tolist(), label=[y_test[i]])
 
         # Define model params
         params = {
@@ -294,7 +447,7 @@ def xgboost(training_df, testing_df, pro_name, periodicity):
         predictions.append(prediction[0])
 
         # Update the training data
-        X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
+        X_train = np.concatenate((X_train, X_test[i:i+1, best_var_indices]), axis=0)  # Rows
         y_train = np.append(y_train, y_test[i])  # Rows
 
     print(f"> PROCESSED XGBoost for project {pro_name} - periodicity: [{periodicity}]")
