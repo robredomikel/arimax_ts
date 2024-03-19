@@ -146,15 +146,23 @@ def svm_regression(training_df, testing_df, pro_name, periodicity):
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
 
+    # Backward parameter optimization
+    best_var_names, best_mae, best_var_indices = nl_optimization(y_train=y_train, X_train=X_train,
+                                                                 y_test=y_test, X_test=X_test,
+                                                                 model_name='svr')
+    # Save it into json
+    parameter_store_json(best_var_names=best_var_names, best_metric=best_mae, pro_name=pro_name, metric_name='mae',
+                         model_name='svr')
+
     for i in range(len(y_test)):
 
         # Pipeline to scale features and train the model
         model = make_pipeline(StandardScaler(), SVR(kernel="rbf"))
-        model.fit(X_train, y_train)
+        model.fit(X_train[:, best_var_names], y_train)
 
         # Make prediction for the next observation
         # New observation for prediction
-        new_observation = X_test[i:i+1, :]
+        new_observation = X_test[i:i+1, best_var_names]
         prediction = model.predict(new_observation)
         predictions.append(np.take(prediction, 0))
 
@@ -174,6 +182,8 @@ def L_optimization(y_train, X_train, model_name):
 
     if model_name == 'L2':  # Ridge
         model = Ridge(alpha=1.0, max_iter=1000)
+    elif model_name == 'sgd':  # Stochastic Gradient Descent
+        model = SGDRegressor(max_iter=1000, tol=0.0001)
     else:  # L1 Lasso
         model = Lasso(alpha=1.0, max_iter=1000)
     model.fit(X_train, y_train)
@@ -377,6 +387,60 @@ def rf_optimization(y_train, X_train, y_test, X_test):
     Optimizes parameter selection for random forest model
     """
 
+    model = RandomForestRegressor(n_estimators=100, random_state=None, n_jobs=-1, bootstrap=False)
+    model.fit(X_train, y_train)
+    predictions = model.predict(X_test)
+    best_mae = MAE(predicted_vals=predictions, testing_vals=y_test)
+    best_variables = list(range(X_train.shape[1]))  # List of current variables indexes
+
+    # Backward variable elimination based on AIC
+    improved = True
+    while improved:
+        improved = False
+        for i in best_variables[1:]:  # COnsidering the first one as the intercept
+            try_variables = [v for v in best_variables if v != i]
+            try_model = RandomForestRegressor(n_estimators=100, random_state=None, n_jobs=-1, bootstrap=False)
+            try_model.fit(X_train[:, try_variables], y_train)
+            try_predictions = try_model.predict(X_test[:, try_variables])
+            try_mae = MAE(predicted_vals=try_predictions, testing_vals=y_test)
+            if try_mae < best_mae:
+                best_mae = try_mae
+                best_variables = try_variables  # Don't forget about the first index with the intercept
+                improved = True
+
+    # Convert the index into the variable names from the original dataframe to store the variable names in a json file
+    best_var_names = [INITIAL_VARS[i] for i in best_variables]
+    return best_var_names, best_mae, best_variables
+
+
+def svr_optimization(y_train, X_train, y_test, X_test):
+    """
+    Optimizes parameter selection for Support vector regression model
+    """
+    model = make_pipeline(StandardScaler(), SVR(kernel="rbf"))
+    model.fit(X_train, y_train)
+    predictions = model.predict(X_test)
+    best_mae = MAE(predicted_vals=predictions, testing_vals=y_test)
+    best_variables = list(range(X_train.shape[1]))  # List of current variables indexes
+
+    # Backward variable elimination based on AIC
+    improved = True
+    while improved:
+        improved = False
+        for i in best_variables[1:]:  # COnsidering the first one as the intercept
+            try_variables = [v for v in best_variables if v != i]
+            try_model = make_pipeline(StandardScaler(), SVR(kernel="rbf"))
+            try_model.fit(X_train[:, try_variables], y_train)
+            try_predictions = try_model.predict(X_test[:, try_variables])
+            try_mae = MAE(predicted_vals=try_predictions, testing_vals=y_test)
+            if try_mae < best_mae:
+                best_mae = try_mae
+                best_variables = try_variables  # Don't forget about the first index with the intercept
+                improved = True
+
+    # Convert the index into the variable names from the original dataframe to store the variable names in a json file
+    best_var_names = [INITIAL_VARS[i] for i in best_variables]
+    return best_var_names, best_mae, best_variables
 
 
 def nl_optimization(y_train, X_train, y_test, X_test, model_name):
@@ -389,11 +453,10 @@ def nl_optimization(y_train, X_train, y_test, X_test, model_name):
 
     if model_name == 'xgb':  # XGBoost
         best_var_names, best_aic, best_var_indices = xgb_optimization(y_train, X_train, y_test, X_test)
-
-    if model_name == 'rf':  # Random Forest
+    elif model_name == 'rf':  # Random Forest
         best_var_names, best_aic, best_var_indices = rf_optimization(y_train, X_train, y_test, X_test)
-
-
+    else:  # Support vector regression
+        best_var_names, best_aic, best_var_indices = svr_optimization(y_train, X_train, y_test, X_test)
 
     return best_var_names, best_aic, best_var_indices
 
@@ -447,7 +510,7 @@ def xgboost(training_df, testing_df, pro_name, periodicity):
         predictions.append(prediction[0])
 
         # Update the training data
-        X_train = np.concatenate((X_train, X_test[i:i+1, best_var_indices]), axis=0)  # Rows
+        X_train = np.concatenate((X_train, X_test[i:i+1, :]), axis=0)  # Rows
         y_train = np.append(y_train, y_test[i])  # Rows
 
     print(f"> PROCESSED XGBoost for project {pro_name} - periodicity: [{periodicity}]")
@@ -476,12 +539,20 @@ def rf_forest(training_df, testing_df, pro_name, periodicity):
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
 
+    # Backward parameter optimization
+    best_var_names, best_mae, best_var_indices = nl_optimization(y_train=y_train, X_train=X_train,
+                                                                 y_test=y_test, X_test=X_test,
+                                                                 model_name='rf')
+    # Save it into json
+    parameter_store_json(best_var_names=best_var_names, best_metric=best_mae, pro_name=pro_name, metric_name='mae',
+                         model_name='rf')
+
     for i in range(len(y_test)):
 
         model = RandomForestRegressor(n_estimators=100, random_state=None, n_jobs=-1, bootstrap=False)
-        model.fit(X_train, y_train)
+        model.fit(X_train[:, best_var_names], y_train)
 
-        new_observation = X_test[i:i+1, :]
+        new_observation = X_test[i:i+1, best_var_names]
         prediction = model.predict(new_observation)
         predictions.append(np.take(prediction, 0))
 
@@ -524,11 +595,17 @@ def sgd_regression(training_df, testing_df, pro_name, periodicity):
     # Explicitly adding the intercept of the Linear Regression
     X_test = np.concatenate((constant_test, X_test_scaled), axis=1)
 
+    # Backward parameter optimization
+    best_var_names, best_aic, best_var_indices = L_optimization(y_train=y_train, X_train=X_train, model_name='sgd')
+    # Save it into json
+    parameter_store_json(best_var_names=best_var_names, best_metric=best_aic, pro_name=pro_name, metric_name='aic',
+                         model_name='sgd')
+
     for i in range(len(y_test)):
         model = SGDRegressor(max_iter=1000, tol=0.0001)
-        model.fit(X_train, y_train)
+        model.fit(X_train[:, best_var_names], y_train)
 
-        new_observation = X_test[i:i+1, :]
+        new_observation = X_test[i:i+1, best_var_names]
         prediction = model.predict(new_observation)
         predictions.append(np.take(prediction, 0))
 
