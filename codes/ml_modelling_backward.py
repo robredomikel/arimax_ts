@@ -14,7 +14,7 @@ import statsmodels.api as sm
 import json
 
 
-def parameter_store_json(best_var_names, best_metric, pro_name, metric_name, model_name):
+def parameter_store_json(best_var_names, best_metric, pro_name, metric_name, model_name, periodicity):
     """
     Stores the best model parameters into a json file
     """
@@ -22,10 +22,13 @@ def parameter_store_json(best_var_names, best_metric, pro_name, metric_name, mod
     ml_model_path = os.path.join(DATA_PATH, "best_ml_model_params")
     if not os.path.exists(ml_model_path):
         os.mkdir(ml_model_path)
-    ml_spec_path = os.path.join(ml_model_path, model_name)
+    periodicity_path = os.path.join(ml_model_path, periodicity)
+    if not os.path.exists(periodicity_path):
+        os.mkdir(periodicity_path)
+    ml_spec_path = os.path.join(periodicity_path, model_name)
     if not os.path.exists(ml_spec_path):
         os.mkdir(ml_spec_path)
-    best_variables_path = os.path.join(ml_model_path, f"{pro_name}_best_variables.json")
+    best_variables_path = os.path.join(ml_spec_path, f"{pro_name}_best_variables.json")
     json_dict = {"best_var_names": best_var_names, "best_aic": best_metric}
 
     with open(best_variables_path, 'w') as f:
@@ -65,7 +68,8 @@ def mlr_optimization(y_train, X_train):
 
     print(f"> Parameter optimization for MLR model completed - best vars: {len(best_variables)} | best AIC: {best_aic}")
     # Convert the index into the variable names from the original dataframe to store the variable names in a json file
-    initial_vars = INITIAL_VARS.append(0, 'Intercept')
+    initial_vars = ['Intercept']
+    initial_vars.extend(INITIAL_VARS)
     best_var_names = [initial_vars[i-1] for i in best_variables[1:]]  # Adjusting for constant
     return best_var_names, best_aic, best_variables
 
@@ -84,7 +88,7 @@ def L_optimization(y_train, X_train, model_name):
         model = Lasso(alpha=1.0, max_iter=1000)
     model.fit(X_train, y_train)
 
-    rss_val = RSS(y=y_train, X=X_train[0], model=model)
+    rss_val = RSS(y=y_train, X=X_train, model=model)
     best_aic = AIC(n=X_train.shape[0], k=X_train.shape[1]+1, rss=rss_val)
     best_variables = list(range(X_train.shape[1]))  # List of current variables indexes
 
@@ -100,7 +104,7 @@ def L_optimization(y_train, X_train, model_name):
             else:
                 try_model = Lasso(alpha=1.0, max_iter=1000)
             try_model.fit(X_train[:, try_variables], y_train)
-            try_rss = RSS(y=y_train, X=X_train[0], model=try_model)
+            try_rss = RSS(y=y_train, X=X_train[:, try_variables], model=try_model)
             try_aic = AIC(n=X_train.shape[0], k=len(try_variables)+1, rss=try_rss)
             if try_aic < best_aic:
                 best_aic = try_aic
@@ -110,7 +114,8 @@ def L_optimization(y_train, X_train, model_name):
 
     print(f"> Parameter optimization for {model_name} model completed - best vars: {len(best_variables)} | best AIC: {best_aic}")
     # Convert the index into the variable names from the original dataframe to store the variable names in a json file
-    initial_vars = INITIAL_VARS.append(0, 'Intercept')
+    initial_vars = ['Intercept']
+    initial_vars.extend(INITIAL_VARS)
     best_var_names = [initial_vars[i-1] for i in best_variables[1:]]  # Adjusting for constant
     return best_var_names, best_aic, best_variables
 
@@ -151,7 +156,7 @@ def mlr_regression(training_df, testing_df, pro_name, periodicity):
     best_var_names, best_aic, best_var_indices = mlr_optimization(y_train=y_train, X_train=X_train)
     # Save it into json
     parameter_store_json(best_var_names=best_var_names, best_metric=best_aic, pro_name=pro_name, metric_name='aic',
-                         model_name='mlr')
+                         model_name='mlr', periodicity=periodicity)
 
     # Walk Forward train test validation
     for i in range(len(y_test)):
@@ -202,17 +207,17 @@ def svm_regression(training_df, testing_df, pro_name, periodicity):
                                                                  model_name='svr')
     # Save it into json
     parameter_store_json(best_var_names=best_var_names, best_metric=best_mae, pro_name=pro_name, metric_name='mae',
-                         model_name='svr')
+                         model_name='svr', periodicity=periodicity)
 
     for i in range(len(y_test)):
 
         # Pipeline to scale features and train the model
         model = make_pipeline(StandardScaler(), SVR(kernel="rbf"))
-        model.fit(X_train[:, best_var_names], y_train)
+        model.fit(X_train[:, best_var_indices], y_train)
 
         # Make prediction for the next observation
         # New observation for prediction
-        new_observation = X_test[i:i+1, best_var_names]
+        new_observation = X_test[i:i+1, best_var_indices]
         prediction = model.predict(new_observation)
         predictions.append(np.take(prediction, 0))
 
@@ -259,7 +264,7 @@ def ridge_regression(training_df, testing_df, pro_name, periodicity):
     best_var_names, best_aic, best_var_indices = L_optimization(y_train=y_train, X_train=X_train, model_name='L2')
     # Save it into json
     parameter_store_json(best_var_names=best_var_names, best_metric=best_aic, pro_name=pro_name, metric_name='aic',
-                         model_name='L2')
+                         model_name='L2', periodicity=periodicity)
 
     predictions = np.empty(len(X_test))
 
@@ -313,7 +318,7 @@ def lasso_regression(training_df, testing_df, pro_name, periodicity):
     best_var_names, best_aic, best_var_indices = L_optimization(y_train=y_train, X_train=X_train, model_name='L1')
     # Save it into json
     parameter_store_json(best_var_names=best_var_names, best_metric=best_aic, pro_name=pro_name, metric_name='aic',
-                         model_name='L1')
+                         model_name='L1', periodicity=periodicity)
 
     predictions = np.empty(len(y_test))
 
@@ -507,7 +512,7 @@ def xgboost(training_df, testing_df, pro_name, periodicity):
                                                                  model_name='xgb')
     # Save it into json
     parameter_store_json(best_var_names=best_var_names, best_metric=best_mae, pro_name=pro_name, metric_name='mae',
-                         model_name='xgb')
+                         model_name='xgb', periodicity=periodicity)
 
     for i in range(len(y_test)):
         # Using DMatrix for train and test with xgb package.
@@ -566,14 +571,14 @@ def rf_forest(training_df, testing_df, pro_name, periodicity):
                                                                  model_name='rf')
     # Save it into json
     parameter_store_json(best_var_names=best_var_names, best_metric=best_mae, pro_name=pro_name, metric_name='mae',
-                         model_name='rf')
+                         model_name='rf', periodicity=periodicity)
 
     for i in range(len(y_test)):
 
         model = RandomForestRegressor(n_estimators=100, random_state=None, n_jobs=-1, bootstrap=False)
-        model.fit(X_train[:, best_var_names], y_train)
+        model.fit(X_train[:, best_var_indices], y_train)
 
-        new_observation = X_test[i:i+1, best_var_names]
+        new_observation = X_test[i:i+1, best_var_indices]
         prediction = model.predict(new_observation)
         predictions.append(np.take(prediction, 0))
 
@@ -621,13 +626,13 @@ def sgd_regression(training_df, testing_df, pro_name, periodicity):
     best_var_names, best_aic, best_var_indices = L_optimization(y_train=y_train, X_train=X_train, model_name='sgd')
     # Save it into json
     parameter_store_json(best_var_names=best_var_names, best_metric=best_aic, pro_name=pro_name, metric_name='aic',
-                         model_name='sgd')
+                         model_name='sgd', periodicity=periodicity)
 
     for i in range(len(y_test)):
         model = SGDRegressor(max_iter=1000, tol=0.0001)
-        model.fit(X_train[:, best_var_names], y_train)
+        model.fit(X_train[:, best_var_indices], y_train)
 
-        new_observation = X_test[i:i+1, best_var_names]
+        new_observation = X_test[i:i+1, best_var_indices]
         prediction = model.predict(new_observation)
         predictions.append(np.take(prediction, 0))
 
@@ -670,7 +675,8 @@ def ml_models():
         model_results_path = os.path.join(ml_results_path, ml_model_names[i])
 
         # Creation of nidek results direcotry
-        os.mkdir(model_results_path)
+        if not os.path.exists(model_results_path):
+            os.mkdir(model_results_path)
         monthly_path = os.path.join(ml_results_path, f"{ml_model_names[i]}/monthly")
         biweekly_path = os.path.join(ml_results_path, f"{ml_model_names[i]}/biweekly")
         complete_path = os.path.join(ml_results_path, f"{ml_model_names[i]}/complete")
@@ -694,12 +700,14 @@ def ml_models():
             # Removing extra index number and commit_date columns from the original dataset
 
             bi_encoding = check_encoding(path=os.path.join(biweekly_data_path, biweekly_files[j]))
-            biweekly_df = (pd.read_csv(os.path.join(biweekly_data_path, biweekly_files[j]), encoding=bi_encoding)
-                           .drop(columns=["COMMIT_DATE"]))
+            if not bi_encoding or bi_encoding == 'ascii':  # 'ascii' can be a sign of an uncertain detection
+                bi_encoding = 'cp1252'  # Fallback encoding
+            biweekly_df = (pd.read_csv(os.path.join(biweekly_data_path, biweekly_files[j]), encoding=bi_encoding).drop(columns=["COMMIT_DATE"]))
             mo_encoding = check_encoding(path=os.path.join(biweekly_data_path, biweekly_files[j]))
-            monthly_df = (pd.read_csv(os.path.join(monthly_data_path, monthly_files[j]), encoding=mo_encoding)
-                          .drop(columns=["COMMIT_DATE"]))
-
+            if not mo_encoding or mo_encoding == 'ascii':  # 'ascii' can be a sign of an uncertain detection
+                mo_encoding = 'cp1252'  # Fallback encoding
+            monthly_df = (pd.read_csv(os.path.join(monthly_data_path, monthly_files[j]), encoding=mo_encoding).drop(columns=["COMMIT_DATE"]))
+            
             # Due to unknown reasons (the extraction was the same) the encoding is not 'ascii' but 'windows1252'
             com_encoding = check_encoding(path=os.path.join(complete_data_path, complete_files[j]))
 
@@ -709,9 +717,8 @@ def ml_models():
                 complete_df = complete_df[1:]  # Consider only the dataframe from the first rows with values
                 complete_df.columns = new_header
             else:
-                complete_df = pd.read_csv(os.path.join(complete_data_path, complete_files[j]), encoding=com_encoding)
-
-            complete_df = complete_df.drop(columns=["COMMIT_DATE"])
+                complete_df = (pd.read_csv(os.path.join(complete_data_path, complete_files[j]), encoding=com_encoding).drop(columns=["COMMIT_DATE"]))
+            
             # Splitting the data into train set (80%) and test set (20%)
             biweekly_train_size = round(0.8 * len(biweekly_df))
             monthly_train_size = round(0.8 * len(monthly_df))

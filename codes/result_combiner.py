@@ -214,12 +214,6 @@ def merge_results(periodicity_level, missing_values):
         save_results(latex=True, df=results_df, file_name=f"{periodicity_level}_data_results.csv")
 
 
-def ts_comparison():
-    """
-
-    """
-
-
 def combine_results():
     """
     Combines the obtained results from each of the models into the same file for comparison purposes
@@ -229,26 +223,34 @@ def combine_results():
     if not os.path.exists(os.path.join(DATA_PATH, 'final_results')):
         os.mkdir(os.path.join(DATA_PATH, 'final_results'))
 
+    overall_missing_result_pros = []
     # merge_outcomes into biweekly data, monthly and complete data
     for periodicity in periodicity_levels:
         print(f"> Processing periodicity level = {periodicity}")
 
         if not periodicity == 'complete':
-            check_results(periodicity_level=periodicity)
+            check_results(periodicity_level=periodicity)  # Check missing values
             # For the calculations we only consider the non-missing projects
             missing_projects = check_missing_results(periodicity_level=periodicity)
+            overall_missing_result_pros.extend(missing_projects)
 
         # Merge all the results into combined result df
         merge_results(periodicity_level=periodicity, missing_values=missing_projects)
 
-        # Merge all ts results into a single df
-        # merge_ts_results()
+    # Final check to know which projects have been considered in the biweekly and monthly model comparison
+    list_projects = os.listdir(os.path.join(DATA_PATH, 'biweekly_data'))
+    pros_considered_in_results = [list_project[:-4] for list_project in list_projects if list_project[:-4]
+                                  not in overall_missing_result_pros]
 
-    # Visualization stage
-    # 1. Comparison among Seasonal Time Series and non-seasonal time series. (bar plots)
-    # ts_comparison()
-
-    # 2. Comparison among Seasonal Time Series and non-seasonal ML models (spider charts)
-
-
+    final_path = os.path.join(DATA_PATH, 'final_results', 'resulting_projects.txt')
+    with open(final_path, 'w') as file:
+        file.write('CONSIDERED PROJECTS IN THE RESULTS:\n')
+        # Join the list elements into a single string with a newline character
+        data_to_write = '\n'.join(pros_considered_in_results)
+        # Write the data to the file
+        file.write(data_to_write)
+        file.write('\nNON CONSIDERED PROJECTS:\n')
+        more_to_write = '\n'.join(overall_missing_result_pros)
+        file.write(more_to_write)
+        file.close()
 
