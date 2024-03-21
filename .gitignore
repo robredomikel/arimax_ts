@@ -1,4 +1,5 @@
 data/*
+*.txt
 myenv/*
 .idea/*
-codes/*.ipynb
+
