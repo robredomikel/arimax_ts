@@ -7,6 +7,13 @@ import pandas as pd
 
 from commons import DATA_PATH
 
+from matplotlib.patches import Circle, RegularPolygon
+from matplotlib.path import Path
+from matplotlib.projections import register_projection
+from matplotlib.projections.polar import PolarAxes
+from matplotlib.spines import Spine
+from matplotlib.transforms import Affine2D
+
 
 def RSS(y, X, model):
     """
@@ -148,6 +155,3 @@ def transform_to_latex(df_path):
         f.write(latex_df)
     f.close()
     print(f"{results_type} RESULTS table saved into LaTex format!")
-
-
-
