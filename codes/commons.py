@@ -8,8 +8,8 @@ INITIAL_VARS = ['S1213', 'RedundantThrowsDeclarationCheck', 'S00117', 'S00122', 
                 'DuplicatedBlocks', 'S1226', 'S00112', 'S1155', 'S00108', 'S1151', 'S1132', 'S1481']
 
 # Flag values for process control of the project
-SARIMAX = False
-RELATED_WORK = False
-ML_MODELS = False
+PREPROCESSING = True
+SARIMAX = True
+RELATED_WORK = True
+ML_MODELS = True
 COMBINE_RESULTS = True
-VISUALIZE = False
