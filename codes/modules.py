@@ -4,8 +4,10 @@ import os
 import chardet
 from io import StringIO
 import pandas as pd
-
+import statsmodels.api as sm
 from commons import DATA_PATH
+from matplotlib import pyplot as plt
+from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 from matplotlib.patches import Circle, RegularPolygon
 from matplotlib.path import Path
@@ -155,3 +157,78 @@ def transform_to_latex(df_path):
         f.write(latex_df)
     f.close()
     print(f"{results_type} RESULTS table saved into LaTex format!")
+
+
+def decomposition_plot(proname_clean, biweekly_data, monthly_data, decomposition_path):
+
+    # Monthly
+    decomposition = sm.tsa.seasonal_decompose(monthly_data['SQALE_INDEX'],
+                                              model='additive',
+                                              period=12)
+    decomposition.plot()
+    plt.savefig(os.path.join(decomposition_path, "monthly_plots", f"{proname_clean}.pdf"))
+    plt.close()
+
+    # Biweekly
+    decomposition = sm.tsa.seasonal_decompose(biweekly_data['SQALE_INDEX'],
+                                              model='additive',
+                                              period=26)
+    decomposition.plot()
+    plt.savefig(os.path.join(decomposition_path, "biweekly_plots", f"{proname_clean}.pdf"))
+    plt.close()
+
+
+def create_diagnostics(seasonality, periodicity, best_model_params, best_regressors, training_df, project_name):
+    """
+    Generates model diagnostics for the given best model in each case
+    """
+
+    X_train = training_df[best_regressors].astype(float)
+    X_train_scaled = X_train.map(np.log1p)
+    y_train = training_df['SQALE_INDEX'].astype(float)
+    arima_order = best_model_params[0]
+    s_order = best_model_params[1]
+
+    if seasonality:
+        model = SARIMAX(y_train.to_numpy(), exog=X_train_scaled.to_numpy(), order=arima_order,
+                        seasonal_order=s_order, enforce_stationarity=True, enforce_invertibility=True)
+
+    else:
+        model = SARIMAX(y_train.to_numpy(), exog=X_train_scaled.to_numpy(), order=arima_order,
+                        enforce_stationarity=True, enforce_invertibility=True)
+
+    fitted_model = model.fit(disp=0)
+
+    # Generate paths
+    diagnostics_path = os.path.join(DATA_PATH, 'model_diagnostic_plots')
+    sarimax_path = os.path.join(diagnostics_path, "sarimax")
+    arimax_path = os.path.join(diagnostics_path, "arimax")
+
+    # Perform seasonal decomposition plots for all projects
+    if not os.path.exists(diagnostics_path):
+        os.mkdir(diagnostics_path)
+        os.mkdir(os.path.join(diagnostics_path, "sarimax"))
+        os.mkdir(os.path.join(diagnostics_path, "arimax"))
+        os.mkdir(os.path.join(diagnostics_path, "sarimax", "biweekly"))
+        os.mkdir(os.path.join(diagnostics_path, "arimax", "biweekly"))
+        os.mkdir(os.path.join(diagnostics_path, "sarimax", "monthly"))
+        os.mkdir(os.path.join(diagnostics_path, "arimax", "monthly"))
+
+    # Visualization
+    plt.rcParams['axes.labelsize'] = 17
+    plt.rcParams['axes.titlesize'] = 17
+    plt.rcParams['xtick.labelsize'] = 17
+    plt.rcParams['ytick.labelsize'] = 17
+    plt.rcParams['legend.fontsize'] = 15
+
+    if seasonality == True:
+
+        fig = fitted_model.plot_diagnostics(figsize=(10, 10))  # Initial: 8,7
+        plt.savefig(os.path.join(sarimax_path, periodicity, f'{project_name}.pdf'), format='pdf')
+        plt.close(fig)
+
+    else:
+
+        fig = fitted_model.plot_diagnostics(figsize=(10, 10))  # Initial: 8,7
+        plt.savefig(os.path.join(arimax_path, periodicity, f'{project_name}.pdf'), format='pdf')
+        plt.close(fig)

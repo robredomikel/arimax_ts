@@ -9,8 +9,8 @@ DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 def preprocessing():
     # Get the imported raw datasets from SQL into a pandas dataframe
-    commits_df = pd.read_csv(os.path.join(DATA_PATH, "raw_data", 'commits.csv'))
-    issues_df = pd.read_csv(os.path.join(DATA_PATH, "raw_data", 'issues.csv'))
+    commits_df = pd.read_csv(os.path.join(DATA_PATH, "raw-data", 'commits.csv'))
+    issues_df = pd.read_csv(os.path.join(DATA_PATH, "raw-data", 'issues.csv'))
 
     rules_list = list(issues_df['RULE'].unique())
     header_cols = ["PROJECT", 'SQALE_INDEX', "COMMIT", "COMMIT_DATE"] + rules_list

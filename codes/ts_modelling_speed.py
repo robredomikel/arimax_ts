@@ -11,7 +11,7 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 import json
 
 from commons import DATA_PATH
-from modules import MAPE, RMSE, MAE, MSE, check_encoding, detect_existing_output
+from modules import MAPE, RMSE, MAE, MSE, check_encoding, detect_existing_output, create_diagnostics
 
 
 def backward_modelling(df, periodicity, seasonality, output_flag=True):
@@ -158,6 +158,7 @@ def backward_modelling(df, periodicity, seasonality, output_flag=True):
         print(f"> Best SARIMAX{best_model_cfg} - AIC:{best_aic} with regressors {best_regressors}")
     else:
         print(f"> Best ARIMAX{best_model_cfg} - AIC:{best_aic} with regressors {best_regressors}")
+
     return best_model_cfg, round(best_aic, 2), best_regressors, output_flag
 
 
@@ -182,6 +183,7 @@ def model_testing(training_df, testing_df, best_model_cfg, best_regressors, seas
         if seasonality:
             model = SARIMAX(y_train.to_numpy(), exog=X_train_scaled.to_numpy(), order=arima_order,
                             seasonal_order=s_order, enforce_stationarity=True, enforce_invertibility=True)
+
         else:
             model = SARIMAX(y_train.to_numpy(), exog=X_train_scaled.to_numpy(), order=arima_order,
                             enforce_stationarity=True, enforce_invertibility=True)
@@ -268,6 +270,8 @@ def arimax_model(df_path, project_name, periodicity, seasonality):
 
     # Model testing
     try:
+        # Creating model diagnostics for visualization:
+        create_diagnostics(seasonality, periodicity, best_model_params, best_regressors, training_df, project_name)
         predictions, aic_val, bic_val = model_testing(training_df=training_df, testing_df=testing_df,
                                                       best_model_cfg=best_model_params, best_regressors=best_regressors,
                                                       seasonality=seasonality, project=project_name)

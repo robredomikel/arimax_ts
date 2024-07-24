@@ -1,5 +1,9 @@
 data/*
-*.txt
 myenv/*
 .idea/*
 
+td_V2.db
+.DS_Store
+codes/draft.ipynb
+codes/visualization.ipynb
+replication-package.zip

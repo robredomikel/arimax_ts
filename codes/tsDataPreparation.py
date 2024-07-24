@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from commons import DATA_PATH
+from modules import decomposition_plot
 
 # CONSTANTS
 #MULTIVARIATE_PATH = "C:/OULU/TECHDEBT2023/data/multivariate_data.csv"
@@ -62,7 +63,7 @@ def correlationAnalysis(MULTIVARIATE_PATH):
     # 4. PERFORMING A CORRELATION ANALYSIS BETWEEN EACH PREDICTOR AND THE RESPONSE VARIABLE
     df = pd.read_csv(MULTIVARIATE_PATH)
     data = df.drop(columns=df.iloc[:, [0, 2, 3]])
-    correlation_matrix = data.corr()
+    correlation_matrix = data.corr(method="spearman")
     corr_sqale = correlation_matrix['SQALE_INDEX'].sort_values(ascending=False)
     corr_sqale = corr_sqale[1:]  # Without the SQALE_INDEX value itself
     corr_sqale_4qr = corr_sqale[corr_sqale >= corr_sqale.describe()['75%']]
@@ -217,6 +218,15 @@ def interpolator(biweekly_dfs, monthly_dfs, project_names):
         biweekly_data.to_csv(os.path.join(DATA_PATH, 'biweekly_data', f"{proname_clean}.csv"))
         monthly_data.to_csv(os.path.join(DATA_PATH, 'monthly_data', f"{proname_clean}.csv"))
 
+        decomposition_path = os.path.join(DATA_PATH, 'decomposition_plots')
+
+        # Perform seasonal decomposition plots for all projects
+        if not os.path.exists(decomposition_path):
+            os.mkdir(os.path.join(DATA_PATH, 'decomposition_plots'))
+            os.mkdir(os.path.join(DATA_PATH, 'decomposition_plots', "monthly_plots"))
+            os.mkdir(os.path.join(DATA_PATH, 'decomposition_plots', "biweekly_plots"))
+
+        decomposition_plot(proname_clean, biweekly_data, monthly_data, decomposition_path)
 
 def data_prepare():
 
