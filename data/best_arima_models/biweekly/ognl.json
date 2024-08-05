@@ -1,0 +1,257 @@
+{
+    "S1213": {
+        "model_params": [
+            [
+                2,
+                0,
+                2
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": 838.1493388798905,
+        "best_regressors": null
+    },
+    "RedundantThrowsDeclarationCheck": {
+        "model_params": [
+            [
+                1,
+                0,
+                1
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": 315.39868274150075,
+        "best_regressors": null
+    },
+    "S00117": {
+        "model_params": [
+            [
+                1,
+                0,
+                3
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": 240.04399583537852,
+        "best_regressors": null
+    },
+    "S00122": {
+        "model_params": [
+            [
+                2,
+                0,
+                0
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": 854.0573304267127,
+        "best_regressors": null
+    },
+    "S1488": {
+        "model_params": [
+            [
+                0,
+                0,
+                0
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": -3091.4441840755426,
+        "best_regressors": null
+    },
+    "S1905": {
+        "model_params": [
+            [
+                2,
+                0,
+                0
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": 413.75225379953406,
+        "best_regressors": null
+    },
+    "UselessImportCheck": {
+        "model_params": [
+            [
+                2,
+                0,
+                0
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": 846.0706392416516,
+        "best_regressors": null
+    },
+    "DuplicatedBlocks": {
+        "model_params": [
+            [
+                2,
+                0,
+                2
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": 650.5441930331845,
+        "best_regressors": null
+    },
+    "S1226": {
+        "model_params": [
+            [
+                1,
+                0,
+                3
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": 327.4140366230833,
+        "best_regressors": null
+    },
+    "S00112": {
+        "model_params": [
+            [
+                1,
+                0,
+                1
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": 728.7653863282826,
+        "best_regressors": null
+    },
+    "S1155": {
+        "model_params": [
+            [
+                0,
+                0,
+                0
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": 618.7290284192685,
+        "best_regressors": null
+    },
+    "S00108": {
+        "model_params": [
+            [
+                3,
+                0,
+                0
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": -130.51964629177303,
+        "best_regressors": null
+    },
+    "S1151": {
+        "model_params": [
+            [
+                1,
+                0,
+                1
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": 803.5207256877438,
+        "best_regressors": null
+    },
+    "S1132": {
+        "model_params": [
+            [
+                1,
+                0,
+                1
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": 774.9950432383753,
+        "best_regressors": null
+    },
+    "S1481": {
+        "model_params": [
+            [
+                2,
+                0,
+                0
+            ],
+            [
+                NaN,
+                NaN,
+                NaN,
+                26
+            ]
+        ],
+        "best_aic": 299.74822349005876,
+        "best_regressors": null
+    }
+}

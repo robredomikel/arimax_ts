@@ -1,11 +1,9 @@
-data/*
 myenv/*
 .idea/*
 
 td_V2.db
 .DS_Store
 codes/draft.ipynb
-codes/visualization.ipynb
 replication-package.zip
 
 codes/__pycache__/
