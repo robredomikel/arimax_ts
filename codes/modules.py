@@ -17,6 +17,18 @@ from matplotlib.spines import Spine
 from matplotlib.transforms import Affine2D
 
 
+def absolute_error(pred, obvs):
+    return round(abs(pred-obvs), 2)
+
+
+def squared_error(pred,obvs):
+    return round((pred-obvs)**2, 2)
+
+
+def sape_error(pred,obvs):
+    return round((2*(abs(pred-obvs)))/(abs(pred)+abs(obvs)), 2)
+
+
 def RSS(y, X, model):
     """
     Theoretical calculation of RSS
@@ -206,14 +218,18 @@ def create_diagnostics(seasonality, periodicity, best_model_params, best_regress
     else:
         diagnostics_path = os.path.join(DATA_PATH, f'model_diagnostic_plot')
 
-    sarimax_path = os.path.join(diagnostics_path, "sarimax")
-    arimax_path = os.path.join(diagnostics_path, "arimax")
+
 
     # Perform seasonal decomposition plots for all projects
     if not os.path.exists(diagnostics_path):
         os.mkdir(diagnostics_path)
         os.mkdir(os.path.join(diagnostics_path, "sarimax"))
         os.mkdir(os.path.join(diagnostics_path, "arimax"))
+        os.mkdir(os.path.join(diagnostics_path, "sarimax", "biweekly"))
+        os.mkdir(os.path.join(diagnostics_path, "arimax", "biweekly"))
+    else:
+        sarimax_path = os.path.join(diagnostics_path, "sarimax")
+        arimax_path = os.path.join(diagnostics_path, "arimax")
         os.mkdir(os.path.join(diagnostics_path, "sarimax", "biweekly"))
         os.mkdir(os.path.join(diagnostics_path, "arimax", "biweekly"))
 

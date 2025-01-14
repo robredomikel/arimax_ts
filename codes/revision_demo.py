@@ -3,10 +3,12 @@ Performs the predictions with the selected models ARIMAX and SARIMAX with a 70/3
 """
 
 from commons import DATA_PATH
-from modules import MAPE, RMSE, MAE, MSE, check_encoding, create_diagnostics
+from modules import (MAPE, RMSE, MAE, MSE, check_encoding, create_diagnostics,
+                     absolute_error, squared_error, sape_error)
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 import os
 import pandas as pd
+from csv import writer
 from tqdm import tqdm
 import numpy as np
 from ts_modelling_speed import assessment_metrics, backward_modelling
@@ -14,7 +16,7 @@ from ts_modelling_speed import assessment_metrics, backward_modelling
 
 def detect_existing_output(project, paths, flag_num, files_num, approach):
 
-    biweekly_results_path = paths
+    biweekly_results_path = paths[0]
     if len(paths) == 3:  # Means the call comes from the ML modelling stage.
         complete_results_path = paths[2]
         # Check if the project has already been processed
@@ -75,6 +77,39 @@ def demo_testing(training_df, testing_df, best_model_cfg, best_regressors, seaso
     return predictions, round(fitted_model.aic, 2), round(fitted_model.bic, 2)
 
 
+def point_assessment(project_name, predicted_vals, real_values, seasonality):
+    """
+    Monitors the point accuracy to understand the impact of the prediction length window
+    """
+
+    csv_header = ["id", "observed_value", "predicted_value", "abs_error", "sq_error", "sAPE_error"]
+    if seasonality:
+        output_path = os.path.join(DATA_PATH, "sarimax_demo")
+    else:
+        output_path = os.path.join(DATA_PATH, "arimax_demo")
+    point_output_path = os.path.join(output_path, "point_assessment")
+    os.makedirs(point_output_path, exist_ok=True)
+    with open(os.path.join(point_output_path, f"{project_name}.csv"), "w", newline="") as f_object:
+        writer_object = writer(f_object)
+        writer_object.writerow(csv_header)
+        f_object.close()
+
+    real_vls_array = real_values.to_numpy()
+    i=0
+    for pred, real in zip(predicted_vals, real_vls_array):
+
+        abs_error = absolute_error(pred=pred,obvs=real)
+        sq_error = squared_error(pred=pred,obvs=real)
+        sp_error = sape_error(pred=pred,obvs=real)
+
+        with open(os.path.join(point_output_path, f"{project_name}.csv"), "a", newline="") as f:
+            writer_object = writer(f)
+            writer_object.writerow([i, real, pred, abs_error, sq_error, sp_error])
+            f_object.close()
+        i+=1
+
+
+
 def arimax_model(df_path, project_name, periodicity, seasonality):
     """
     Performs the modelling of the ARIMAX model.
@@ -113,6 +148,8 @@ def arimax_model(df_path, project_name, periodicity, seasonality):
         predictions, aic_val, bic_val = demo_testing(training_df=training_df, testing_df=testing_df,
                                                       best_model_cfg=best_model_params, best_regressors=best_regressors,
                                                       seasonality=seasonality, project=project_name)
+
+        point_assessment(project_name=project_name, predicted_vals=predictions, real_values=testing_df["SQALE_INDEX"])
         assessment_vals = assessment_metrics(predictions=predictions, real_values=testing_df["SQALE_INDEX"].tolist())
 
     except np.linalg.LinAlgError:  # In case there is some lineal algebra decomposition error
@@ -183,7 +220,7 @@ def tsa_model_demo(seasonality):
 def main():
 
     tsa_model_demo(seasonality=True)
-    tsa_model_demo(seasonality=False)
+    # tsa_model_demo(seasonality=False)
 
 
 if __name__ == '__main__':
