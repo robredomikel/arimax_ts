@@ -1,6 +1,6 @@
 myenv/*
 .idea/*
-
+venv/
 td_V2.db
 .DS_Store
 codes/draft.ipynb
