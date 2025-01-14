@@ -178,7 +178,8 @@ def decomposition_plot(proname_clean, biweekly_data, monthly_data, decomposition
     plt.close()
 
 
-def create_diagnostics(seasonality, periodicity, best_model_params, best_regressors, training_df, project_name):
+def create_diagnostics(seasonality, periodicity, best_model_params, best_regressors, training_df, project_name,
+                       demo):
     """
     Generates model diagnostics for the given best model in each case
     """
@@ -200,7 +201,11 @@ def create_diagnostics(seasonality, periodicity, best_model_params, best_regress
     fitted_model = model.fit(disp=0)
 
     # Generate paths
-    diagnostics_path = os.path.join(DATA_PATH, 'model_diagnostic_plots')
+    if demo:
+        diagnostics_path = os.path.join(DATA_PATH, f'model_diagnostic_plot_demo')
+    else:
+        diagnostics_path = os.path.join(DATA_PATH, f'model_diagnostic_plot')
+
     sarimax_path = os.path.join(diagnostics_path, "sarimax")
     arimax_path = os.path.join(diagnostics_path, "arimax")
 
@@ -211,8 +216,6 @@ def create_diagnostics(seasonality, periodicity, best_model_params, best_regress
         os.mkdir(os.path.join(diagnostics_path, "arimax"))
         os.mkdir(os.path.join(diagnostics_path, "sarimax", "biweekly"))
         os.mkdir(os.path.join(diagnostics_path, "arimax", "biweekly"))
-        os.mkdir(os.path.join(diagnostics_path, "sarimax", "monthly"))
-        os.mkdir(os.path.join(diagnostics_path, "arimax", "monthly"))
 
     # Visualization
     plt.rcParams['axes.labelsize'] = 17

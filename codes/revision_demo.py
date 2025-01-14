@@ -3,10 +3,13 @@ Performs the predictions with the selected models ARIMAX and SARIMAX with a 70/3
 """
 
 from commons import DATA_PATH
-from modules import MAPE, RMSE, MAE, MSE
+from modules import MAPE, RMSE, MAE, MSE, check_encoding, create_diagnostics
+from statsmodels.tsa.statespace.sarimax import SARIMAX
 import os
 import pandas as pd
 from tqdm import tqdm
+import numpy as np
+from ts_modelling_speed import assessment_metrics, backward_modelling
 
 
 def detect_existing_output(project, paths, flag_num, files_num, approach):
@@ -30,6 +33,99 @@ def detect_existing_output(project, paths, flag_num, files_num, approach):
         else:
             print(f"> Processing project {project} for {approach} approach.")
             return False
+
+
+def demo_testing(training_df, testing_df, best_model_cfg, best_regressors, seasonality, project):
+    """
+    Given the best model order parameters obtained from the backward variable selection and aut_arima tuning we
+    fit the SARIMAX model for forecasting
+    """
+
+    arima_order = best_model_cfg[0]
+    s_order = best_model_cfg[1]
+
+    # Training the SARIMAX model
+    X_train = training_df[best_regressors].astype(float)
+    y_train = training_df['SQALE_INDEX'].astype(float)
+    X_train_scaled = X_train.map(np.log1p)
+
+    # Model fitting
+    if seasonality:
+        model = SARIMAX(y_train.to_numpy(), exog=X_train_scaled.to_numpy(), order=arima_order,
+                        seasonal_order=s_order, enforce_stationarity=True, enforce_invertibility=True)
+
+    else:
+        model = SARIMAX(y_train.to_numpy(), exog=X_train_scaled.to_numpy(), order=arima_order,
+                        enforce_stationarity=True, enforce_invertibility=True)
+
+    fitted_model = model.fit(disp=0)
+
+    predictions = []
+
+    for i in range(len(testing_df)):
+
+        # Model forecasting
+        best_reg_df = testing_df[best_regressors]
+        best_reg_df_scaled = np.log1p(best_reg_df)
+        X_test = best_reg_df_scaled.iloc[i, :].values.reshape(1, -1)
+        y_pred = fitted_model.get_forecast(steps=1, exog=X_test)
+        predictions.append(y_pred.predicted_mean[0])
+
+    print(f"> Model testing stage performed for project {project}")
+    return predictions, round(fitted_model.aic, 2), round(fitted_model.bic, 2)
+
+
+def arimax_model(df_path, project_name, periodicity, seasonality):
+    """
+    Performs the modelling of the ARIMAX model.
+
+    :param df_path: Path of the existing csv file with project data
+    :param project_name: Name of the project
+    :param periodicity: Periodicity level between observations
+    :return model assessment metrics
+    """
+
+    # DATA PREPARATION (Splitting)
+    encoding = check_encoding(df_path)
+    df = pd.read_csv(df_path, encoding=encoding)
+    df.COMMIT_DATE = pd.to_datetime(df.COMMIT_DATE)
+    sqale_index = df.SQALE_INDEX.to_numpy()  # Dependent variable
+    split_point = round(len(sqale_index)*0.7)  # Initial data splitting. (70% training 30% testing)
+    training_df = df.iloc[:split_point, :]
+    testing_df = df.iloc[split_point:, :]
+
+    # SARIMAX backward modelling
+    best_model_params, best_aic, best_regressors, output_flag = backward_modelling(df=training_df,
+                                                                                   periodicity=periodicity,
+                                                                                   seasonality=seasonality,
+                                                                                   output_flag=True)
+
+    # If there was error in the calculation of the backward modelling then we exclude the results from this project
+    # for the given data format.
+    if output_flag is False:
+        return [project_name, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
+
+    # Model testing
+    try:
+        # Creating model diagnostics for visualization:
+        create_diagnostics(seasonality, periodicity, best_model_params, best_regressors, training_df, project_name,
+                           demo=True)
+        predictions, aic_val, bic_val = demo_testing(training_df=training_df, testing_df=testing_df,
+                                                      best_model_cfg=best_model_params, best_regressors=best_regressors,
+                                                      seasonality=seasonality, project=project_name)
+        assessment_vals = assessment_metrics(predictions=predictions, real_values=testing_df["SQALE_INDEX"].tolist())
+
+    except np.linalg.LinAlgError:  # In case there is some lineal algebra decomposition error
+        assessment_vals = [np.nan, np.nan, np.nan, np.nan]
+        aic_val, bic_val = np.nan, np.nan
+
+    print(f"> Final results for project {project_name}:\n"
+          f"MAPE:{assessment_vals[0]}\n"
+          f"MSE:{assessment_vals[1]}\n"
+          f"MAE:{assessment_vals[2]}\n"
+          f"RMSE:{assessment_vals[3]}\n")
+    return [project_name, assessment_vals[0], assessment_vals[1], assessment_vals[2], assessment_vals[3],
+            aic_val, bic_val]
 
 
 def tsa_model_demo(seasonality):
@@ -88,6 +184,7 @@ def main():
 
     tsa_model_demo(seasonality=True)
     tsa_model_demo(seasonality=False)
+
 
 if __name__ == '__main__':
     main()
