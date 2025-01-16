@@ -227,6 +227,73 @@ def arimax_model(df_path, project_name, periodicity, seasonality):
             aic_val, bic_val]
 
 
+def generate_project_normalized_mape_boxplots(output_path, seasonality):
+    """
+    Generate boxplots for MAPE values per biweekly observation across all projects.
+    Normalize MAPE values by the number of analyzed repositories,
+    dynamically adjusting for projects that stop contributing data.
+    """
+
+    # Define paths
+    results_dir = os.path.join(output_path, "point_assessment")
+
+    # Collect MAPE data
+    mape_data = []
+    project_files = [f for f in os.listdir(results_dir) if f.endswith(".csv")]
+
+    project_observations = {}
+    for file in project_files:
+        project_path = os.path.join(results_dir, file)
+        project_df = pd.read_csv(project_path)
+        project_name = file[:-4]
+        project_observations[project_name] = project_df["mape"].tolist()
+
+    # Find the maximum number of observations
+    max_observations = max(len(mape_values) for mape_values in project_observations.values())
+
+    # Set the display limit based on seasonality
+    display_limit = 36 if seasonality else 72
+    max_observations = min(max_observations, display_limit)
+
+    # Normalize MAPE values
+    normalized_mape_data = []
+    for observation in range(max_observations):
+        active_projects = 0
+        observation_values = []
+        for project, mape_values in project_observations.items():
+            if observation < len(mape_values):  # Ensure the project has data for this observation
+                observation_values.append(mape_values[observation])
+                active_projects += 1
+
+        if active_projects > 0:  # Avoid division by zero
+            normalized_observation_values = [value / active_projects for value in observation_values]
+            for value in normalized_observation_values:
+                normalized_mape_data.append({"Observation": observation + 1, "Normalized MAPE": value})
+
+    # Create a DataFrame for visualization
+    normalized_mape_df = pd.DataFrame(normalized_mape_data)
+
+    # Plot boxplots for each observation
+    plt.figure(figsize=(12, 6))
+    sns.boxplot(x="Observation", y="Normalized MAPE", data=normalized_mape_df, palette="Blues", showfliers=False)
+    if seasonality:
+        plt.title("Normalized MAPE Boxplot Per Monthly Observation Across Projects - SARIMAX")
+        plt.xlabel("Monthly Observation Index")
+    else:
+        plt.title("Normalized MAPE Boxplot Per Biweekly Observation Across Projects - ARIMAX")
+        plt.xlabel("Biweekly Observation Index")
+
+    plt.ylabel("Normalized MAPE")
+    plt.xticks(rotation=45)
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+
+    # Save and show the plot
+    plot_path = os.path.join(output_path, "normalized_project_mape_boxplot.pdf")
+    plt.savefig(plot_path)
+    plt.show()
+    print(f"> Normalized MAPE boxplot saved at {plot_path}")
+
+
 def generate_mape_boxplots(output_path, seasonality):
     """
     Generate boxplots for MAPE values per biweekly observation across all projects.
@@ -255,9 +322,9 @@ def generate_mape_boxplots(output_path, seasonality):
 
     # Plot boxplots for each observation
     plt.figure(figsize=(12, 6))
-    sns.boxplot(x="Observation", y="MAPE", data=mape_df, palette="Blues")
+    sns.boxplot(x="Observation", y="MAPE", data=mape_df, palette="Blues", showfliers=False)
     if seasonality:
-        plt.title("MAPE Boxplot Per Biweekly Observation Across Projects - SARIMAX")
+        plt.title("MAPE Boxplot Per Monthly Observation Across Projects - SARIMAX")
         plt.xlabel("Monthly Observation Index")
     else:
         plt.title("MAPE Boxplot Per Biweekly Observation Across Projects - ARIMAX")
@@ -309,9 +376,9 @@ def generate_mini_mape_boxplot(output_path, seasonality):
 
     # Plot boxplots for each observation
     plt.figure(figsize=(12, 6))
-    sns.boxplot(x="Observation", y="MAPE", data=mape_df, palette="Blues")
+    sns.boxplot(x="Observation", y="MAPE", data=mape_df, palette="Blues", showfliers=False)
     if seasonality:
-        plt.title("MAPE Boxplot Per Biweekly Observation Across Projects - SARIMAX")
+        plt.title("MAPE Boxplot Per Monthly Observation Across Projects - SARIMAX")
         plt.xlabel("Monthly Aggregated MAPE results")
     else:
         plt.title("MAPE Boxplot Per Biweekly Observation Across Projects - ARIMAX")
@@ -386,6 +453,7 @@ def tsa_model_demo(seasonality):
     # Generate boxplot for MAPE values
     generate_mape_boxplots(output_path, seasonality)
     generate_mini_mape_boxplot(output_path, seasonality)
+    generate_project_normalized_mape_boxplots(output_path, seasonality)
 
 
 def analyze_distance_and_plot(output_path, seasonality):
@@ -460,10 +528,10 @@ def analyze_distance_and_plot(output_path, seasonality):
 
 def main():
 
-    #tsa_model_demo(seasonality=True)
-    #tsa_model_demo(seasonality=False)
-    analyze_distance_and_plot(output_path=os.path.join(DATA_PATH, "sarimax_demo"), seasonality=True)
-    analyze_distance_and_plot(output_path=os.path.join(DATA_PATH, "arimax_demo"), seasonality=False)
+    tsa_model_demo(seasonality=True)
+    tsa_model_demo(seasonality=False)
+    #analyze_distance_and_plot(output_path=os.path.join(DATA_PATH, "sarimax_demo"), seasonality=True)
+    #analyze_distance_and_plot(output_path=os.path.join(DATA_PATH, "arimax_demo"), seasonality=False)
 
 
 if __name__ == '__main__':
