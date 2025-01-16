@@ -14,6 +14,7 @@ import numpy as np
 from ts_modelling_speed import assessment_metrics, backward_modelling
 import json
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 def detect_existing_output(project, paths, flag_num, files_num, approach):
@@ -82,7 +83,8 @@ def demo_testing(training_df, testing_df, best_model_cfg, best_regressors, seaso
     return predictions, confidence_intervals, round(fitted_model.aic, 2), round(fitted_model.bic, 2)
 
 
-def generate_lineplot(real_vls_array, predicted_vals, conf_intervals, project_name, output_path):
+def generate_lineplot(real_vls_array, predicted_vals, conf_intervals, project_name, output_path,
+                      seasonality):
 
     # Generate Line Plot
     plt.figure(figsize=(10, 6))
@@ -92,9 +94,13 @@ def generate_lineplot(real_vls_array, predicted_vals, conf_intervals, project_na
     lower_bounds = [ci[0] for ci in conf_intervals]
     upper_bounds = [ci[1] for ci in conf_intervals]
     plt.fill_between(x_range, lower_bounds, upper_bounds, color="gray", alpha=0.3, label="95% CI")
-    plt.title(f"Prediction vs Observed for Project {project_name}")
-    plt.xlabel("Observation Index")
-    plt.ylabel("SQALE_INDEX")
+    if seasonality:
+        plt.title(f"Prediction vs Observed for Project {project_name} - SARIMAX")
+        plt.xlabel("Months")
+    else:
+        plt.title(f"Prediction vs Observed for Project {project_name} - ARIMAX")
+        plt.xlabel("Biweekly periods")
+    plt.ylabel("SQALE INDEX")
     plt.legend()
     plt.grid()
     figures_path = os.path.join(output_path, "figures")
@@ -113,9 +119,9 @@ def point_assessment(project_name, predicted_vals, conf_intervals, real_values, 
     csv_header = ["id", "observed_value", "predicted_value", "lower_95", "upper_95", "abs_error", "sq_error", "sAPE_error",
                   "mape", "mae", "rmse", "mse"]
     if seasonality:
-        output_path = os.path.join(DATA_PATH, "sarimax_demo_0")
+        output_path = os.path.join(DATA_PATH, "sarimax_demo")
     else:
-        output_path = os.path.join(DATA_PATH, "arimax_demo_0")
+        output_path = os.path.join(DATA_PATH, "arimax_demo")
     point_output_path = os.path.join(output_path, "point_assessment")
     os.makedirs(point_output_path, exist_ok=True)
     csv_file_path = os.path.join(point_output_path, f"{project_name}.csv")
@@ -144,7 +150,7 @@ def point_assessment(project_name, predicted_vals, conf_intervals, real_values, 
             f_object.close()
         i+=1
 
-        generate_lineplot(real_vls_array, predicted_vals, conf_intervals, project_name, output_path)
+        generate_lineplot(real_vls_array, predicted_vals, conf_intervals, project_name, output_path, seasonality)
 
 
 def arimax_model(df_path, project_name, periodicity, seasonality):
@@ -221,6 +227,110 @@ def arimax_model(df_path, project_name, periodicity, seasonality):
             aic_val, bic_val]
 
 
+def generate_mape_boxplots(output_path, seasonality):
+    """
+    Generate boxplots for MAPE values per biweekly observation across all projects.
+    """
+
+    # Define paths
+    if seasonality:
+        results_dir = os.path.join(output_path, "point_assessment")
+    else:
+        results_dir = os.path.join(output_path, "point_assessment")
+
+    # Collect MAPE data
+    mape_data = []
+    project_files = [f for f in os.listdir(results_dir) if f.endswith(".csv")]
+
+    for file in project_files:
+        project_path = os.path.join(results_dir, file)
+        project_df = pd.read_csv(project_path)
+
+        # Extract biweekly observation indices and MAPE values
+        for i, row in project_df.iterrows():
+            mape_data.append({"Observation": i, "MAPE": row["mape"], "Project": file[:-4]})
+
+    # Create a DataFrame for visualization
+    mape_df = pd.DataFrame(mape_data)
+
+    # Plot boxplots for each observation
+    plt.figure(figsize=(12, 6))
+    sns.boxplot(x="Observation", y="MAPE", data=mape_df, palette="Blues")
+    if seasonality:
+        plt.title("MAPE Boxplot Per Biweekly Observation Across Projects - SARIMAX")
+        plt.xlabel("Monthly Observation Index")
+    else:
+        plt.title("MAPE Boxplot Per Biweekly Observation Across Projects - ARIMAX")
+        plt.xlabel("Biweekly Observation Index")
+
+    plt.ylabel("MAPE")
+    plt.xticks(rotation=45)
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+
+    # Save and show the plot
+    if seasonality:
+        plot_path = os.path.join(output_path, "mape_boxplot.pdf")
+    else:
+        plot_path = os.path.join(output_path, "mape_boxplot.pdf")
+    plt.savefig(plot_path)
+    plt.show()
+    print(f"> Boxplot saved at {plot_path}")
+
+
+def generate_mini_mape_boxplot(output_path, seasonality):
+    """
+    Generate boxplots for MAPE values per biweekly observation across all projects in a diminished format.
+    """
+
+    # Define paths
+    if seasonality:
+        results_dir = os.path.join(output_path, "point_assessment")
+    else:
+        results_dir = os.path.join(output_path, "point_assessment")
+
+    # Collect MAPE data
+    mape_data = []
+    project_files = [f for f in os.listdir(results_dir) if f.endswith(".csv")]
+    min_observations = float("inf")
+
+    for file in project_files:
+        project_path = os.path.join(results_dir, file)
+        project_df = pd.read_csv(project_path)
+
+        min_observations = min(min_observations, len(project_df))
+        # Extract biweekly observation indices and MAPE values
+        for i, row in project_df.iterrows():
+            if i < min_observations:
+                mape_data.append({"Observation": i, "MAPE": row["mape"], "Project": file[:-4]})
+
+    # Create a DataFrame for visualization
+    mape_df = pd.DataFrame(mape_data)
+    mape_df = mape_df[mape_df["Observation"] < min_observations]
+
+    # Plot boxplots for each observation
+    plt.figure(figsize=(12, 6))
+    sns.boxplot(x="Observation", y="MAPE", data=mape_df, palette="Blues")
+    if seasonality:
+        plt.title("MAPE Boxplot Per Biweekly Observation Across Projects - SARIMAX")
+        plt.xlabel("Monthly Aggregated MAPE results")
+    else:
+        plt.title("MAPE Boxplot Per Biweekly Observation Across Projects - ARIMAX")
+        plt.xlabel("Biweekly Aggregated MAPE results")
+
+    plt.ylabel("MAPE")
+    plt.xticks(rotation=45)
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+
+    # Save and show the plot
+    if seasonality:
+        plot_path = os.path.join(output_path, "cropped_mape_boxplot_sarimax.pdf")
+    else:
+        plot_path = os.path.join(output_path, "cropped_mape_boxplot_arimax.pdf")
+    plt.savefig(plot_path)
+    plt.show()
+    print(f"> Boxplot saved at {plot_path}")
+
+
 def tsa_model_demo(seasonality):
     """
     Executes the tsa process
@@ -228,12 +338,13 @@ def tsa_model_demo(seasonality):
 
     # Check if Seasonality is taken into consideration
     if seasonality == True:
-        output_directory = "sarimax_demo_0"
+        output_directory = "sarimax_demo"
     else:
-        output_directory = "arimax_demo_0"
+        output_directory = "arimax_demo"
 
     biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data")
     output_path = os.path.join(DATA_PATH, output_directory)
+
     if not os.path.exists(output_path):
         os.mkdir(output_path)
         os.mkdir(os.path.join(output_path, "biweekly_results"))
@@ -272,11 +383,87 @@ def tsa_model_demo(seasonality):
     else:
         print("> ARIMAX stage performed!")
 
+    # Generate boxplot for MAPE values
+    generate_mape_boxplots(output_path, seasonality)
+    generate_mini_mape_boxplot(output_path, seasonality)
+
+
+def analyze_distance_and_plot(output_path, seasonality):
+    """
+    Analyze the distances (absolute errors) and generate plots for all projects.
+    """
+
+    # Define the directory containing point assessment results
+    if seasonality:
+        results_dir = os.path.join(output_path, "point_assessment")
+    else:
+        results_dir = os.path.join(output_path, "point_assessment")
+
+    project_files = [f for f in os.listdir(results_dir) if f.endswith(".csv")]
+
+    # Gather distance (abs_error) data across all projects
+    distances = {}
+    max_observations = float("inf")
+
+    for file in project_files:
+        project_path = os.path.join(results_dir, file)
+        project_df = pd.read_csv(project_path)
+
+        project_name = file[:-4]
+        distances[project_name] = project_df["abs_error"].to_list()
+
+        # Find the minimum number of observations across projects
+        max_observations = min(max_observations, len(distances[project_name]))
+
+    # Trim data to the minimum number of observations
+    for project in distances:
+        distances[project] = distances[project][:max_observations]
+
+    # Scatterplot for each project
+    for project, errors in distances.items():
+        plt.figure(figsize=(10, 6))
+        plt.scatter(range(len(errors)), errors, label=f"{project} Distances", color="orange", alpha=0.7)
+        if seasonality:
+            plt.title(f"Observed vs Predicted Distance for {project} - SARIMAX")
+            plt.xlabel("Monthly observation index")
+        else:
+            plt.title(f"Observed vs Predicted Distance for {project} - ARIMAX")
+            plt.xlabel("Biweekly observation index")
+
+        plt.ylabel("Distance (In minutes to remediate Code TD)")
+        plt.grid(alpha=0.5)
+        figures_path = os.path.join(output_path, "figures", "distance_scatterplots")
+        os.makedirs(figures_path, exist_ok=True)
+        plt.savefig(os.path.join(figures_path, f"{project}_distance_scatterplot.pdf"))
+        plt.close()
+        print(f"> Scatterplot for project {project} saved.")
+
+    # Calculate mean distances across all projects
+    mean_distances = [sum(errors[i] for errors in distances.values()) / len(distances) for i in range(max_observations)]
+
+    # Scatterplot for mean distances
+    plt.figure(figsize=(10, 6))
+    plt.scatter(range(max_observations), mean_distances, label="Mean Distance Across Projects", color="green",
+                alpha=0.8)
+    plt.title("Mean Observed vs Predicted Distance Across Projects")
+    if seasonality:
+        plt.xlabel("Monthly observation Index")
+    else:
+        plt.xlabel("Biweekly observation Index")
+    plt.ylabel("Mean (In minutes to remediate Code TD)")
+    plt.grid(alpha=0.5)
+    mean_plot_path = os.path.join(output_path, "mean_distance_scatterplot.pdf")
+    plt.savefig(mean_plot_path)
+    plt.close()
+    print(f"> Mean distance scatterplot saved at {mean_plot_path}")
+
 
 def main():
 
     #tsa_model_demo(seasonality=True)
-    tsa_model_demo(seasonality=False)
+    #tsa_model_demo(seasonality=False)
+    analyze_distance_and_plot(output_path=os.path.join(DATA_PATH, "sarimax_demo"), seasonality=True)
+    analyze_distance_and_plot(output_path=os.path.join(DATA_PATH, "arimax_demo"), seasonality=False)
 
 
 if __name__ == '__main__':
