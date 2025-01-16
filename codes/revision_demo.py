@@ -12,6 +12,8 @@ from csv import writer
 from tqdm import tqdm
 import numpy as np
 from ts_modelling_speed import assessment_metrics, backward_modelling
+import json
+import matplotlib.pyplot as plt
 
 
 def detect_existing_output(project, paths, flag_num, files_num, approach):
@@ -47,7 +49,8 @@ def demo_testing(training_df, testing_df, best_model_cfg, best_regressors, seaso
     s_order = best_model_cfg[1]
 
     # Training the SARIMAX model
-    X_train = training_df[best_regressors].astype(float)
+    existing_columns = list(set(best_regressors).intersection(training_df.columns))
+    X_train = training_df[existing_columns].astype(float)
     y_train = training_df['SQALE_INDEX'].astype(float)
     X_train_scaled = X_train.map(np.log1p)
 
@@ -63,51 +66,85 @@ def demo_testing(training_df, testing_df, best_model_cfg, best_regressors, seaso
     fitted_model = model.fit(disp=0)
 
     predictions = []
+    confidence_intervals = []
 
     for i in range(len(testing_df)):
 
         # Model forecasting
-        best_reg_df = testing_df[best_regressors]
+        best_reg_df = testing_df[existing_columns]
         best_reg_df_scaled = np.log1p(best_reg_df)
         X_test = best_reg_df_scaled.iloc[i, :].values.reshape(1, -1)
         y_pred = fitted_model.get_forecast(steps=1, exog=X_test)
         predictions.append(y_pred.predicted_mean[0])
+        confidence_intervals.append(y_pred.conf_int(alpha=0.05)[0])
 
     print(f"> Model testing stage performed for project {project}")
-    return predictions, round(fitted_model.aic, 2), round(fitted_model.bic, 2)
+    return predictions, confidence_intervals, round(fitted_model.aic, 2), round(fitted_model.bic, 2)
 
 
-def point_assessment(project_name, predicted_vals, real_values, seasonality):
+def generate_lineplot(real_vls_array, predicted_vals, conf_intervals, project_name, output_path):
+
+    # Generate Line Plot
+    plt.figure(figsize=(10, 6))
+    x_range = range(len(real_vls_array))
+    plt.plot(x_range, real_vls_array, label="Observed", color="blue", marker="o")
+    plt.plot(x_range, predicted_vals, label="Predicted", color="orange", linestyle="--", marker="x")
+    lower_bounds = [ci[0] for ci in conf_intervals]
+    upper_bounds = [ci[1] for ci in conf_intervals]
+    plt.fill_between(x_range, lower_bounds, upper_bounds, color="gray", alpha=0.3, label="95% CI")
+    plt.title(f"Prediction vs Observed for Project {project_name}")
+    plt.xlabel("Observation Index")
+    plt.ylabel("SQALE_INDEX")
+    plt.legend()
+    plt.grid()
+    figures_path = os.path.join(output_path, "figures")
+    os.makedirs(figures_path, exist_ok=True)
+    plot_path = os.path.join(figures_path, f"{project_name}_lineplot.pdf")
+    plt.savefig(plot_path)
+    plt.close()
+    print(f"> Line plot saved at {plot_path}")
+
+
+def point_assessment(project_name, predicted_vals, conf_intervals, real_values, seasonality):
     """
     Monitors the point accuracy to understand the impact of the prediction length window
     """
 
-    csv_header = ["id", "observed_value", "predicted_value", "abs_error", "sq_error", "sAPE_error"]
+    csv_header = ["id", "observed_value", "predicted_value", "lower_95", "upper_95", "abs_error", "sq_error", "sAPE_error",
+                  "mape", "mae", "rmse", "mse"]
     if seasonality:
-        output_path = os.path.join(DATA_PATH, "sarimax_demo")
+        output_path = os.path.join(DATA_PATH, "sarimax_demo_0")
     else:
-        output_path = os.path.join(DATA_PATH, "arimax_demo")
+        output_path = os.path.join(DATA_PATH, "arimax_demo_0")
     point_output_path = os.path.join(output_path, "point_assessment")
     os.makedirs(point_output_path, exist_ok=True)
-    with open(os.path.join(point_output_path, f"{project_name}.csv"), "w", newline="") as f_object:
+    csv_file_path = os.path.join(point_output_path, f"{project_name}.csv")
+
+    with open(csv_file_path, "w", newline="") as f_object:
         writer_object = writer(f_object)
         writer_object.writerow(csv_header)
         f_object.close()
 
     real_vls_array = real_values.to_numpy()
     i=0
-    for pred, real in zip(predicted_vals, real_vls_array):
+    for pred, real, conf in zip(np.asarray(predicted_vals), real_vls_array, conf_intervals):
 
-        abs_error = absolute_error(pred=pred,obvs=real)
-        sq_error = squared_error(pred=pred,obvs=real)
-        sp_error = sape_error(pred=pred,obvs=real)
+        lower_95, upper_95 = conf
+        abs_error = absolute_error(pred=pred, obvs=real)
+        sq_error = squared_error(pred=pred, obvs=real)
+        sp_error = sape_error(pred=pred, obvs=real)
+        mape = MAPE(predicted_vals=predicted_vals[0:i+1], testing_vals=real_vls_array[0:i+1])
+        mae = MAE(predicted_vals=predicted_vals[0:i+1], testing_vals=real_vls_array[0:i+1])
+        rmse = RMSE(predicted_vals=predicted_vals[0:i+1], testing_vals=real_vls_array[0:i+1])
+        mse = MSE(predicted_vals=predicted_vals[0:i+1], testing_vals=real_vls_array[0:i+1])
 
-        with open(os.path.join(point_output_path, f"{project_name}.csv"), "a", newline="") as f:
+        with open(csv_file_path, "a", newline="") as f:
             writer_object = writer(f)
-            writer_object.writerow([i, real, pred, abs_error, sq_error, sp_error])
+            writer_object.writerow([i, real, pred, lower_95, upper_95, abs_error, sq_error, sp_error, mape, mae, rmse, mse])
             f_object.close()
         i+=1
 
+        generate_lineplot(real_vls_array, predicted_vals, conf_intervals, project_name, output_path)
 
 
 def arimax_model(df_path, project_name, periodicity, seasonality):
@@ -125,10 +162,11 @@ def arimax_model(df_path, project_name, periodicity, seasonality):
     df = pd.read_csv(df_path, encoding=encoding)
     df.COMMIT_DATE = pd.to_datetime(df.COMMIT_DATE)
     sqale_index = df.SQALE_INDEX.to_numpy()  # Dependent variable
-    split_point = round(len(sqale_index)*0.7)  # Initial data splitting. (70% training 30% testing)
+    split_point = round(len(sqale_index)*0.8)  # Initial data splitting. (70% training 30% testing)
     training_df = df.iloc[:split_point, :]
     testing_df = df.iloc[split_point:, :]
 
+    """
     # SARIMAX backward modelling
     best_model_params, best_aic, best_regressors, output_flag = backward_modelling(df=training_df,
                                                                                    periodicity=periodicity,
@@ -139,17 +177,35 @@ def arimax_model(df_path, project_name, periodicity, seasonality):
     # for the given data format.
     if output_flag is False:
         return [project_name, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
+    """
+
+    print(f"PROJECT NAME: {project_name}")
+    if seasonality:
+        model_path = os.path.join(DATA_PATH, "best_sarimax_models/monthly", f"{project_name}.json")
+    else:
+        model_path = os.path.join(DATA_PATH, "best_arimax_models/biweekly", f"{project_name}.json")
+
+    if not os.path.exists(model_path):
+        return [project_name, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
+
+    with open(model_path, "r", encoding="utf-8") as f_json:
+        json_data = json.load(f_json)
+
+    best_model_params = json_data["model_params"]
+    best_regressors = json_data["best_regressors"]
 
     # Model testing
     try:
-        # Creating model diagnostics for visualization:
-        create_diagnostics(seasonality, periodicity, best_model_params, best_regressors, training_df, project_name,
-                           demo=True)
-        predictions, aic_val, bic_val = demo_testing(training_df=training_df, testing_df=testing_df,
-                                                      best_model_cfg=best_model_params, best_regressors=best_regressors,
-                                                      seasonality=seasonality, project=project_name)
 
-        point_assessment(project_name=project_name, predicted_vals=predictions, real_values=testing_df["SQALE_INDEX"])
+        # Creating model diagnostics for visualization:
+        #create_diagnostics(seasonality, periodicity, best_model_params, best_regressors, training_df, project_name,
+        #                   demo=True)
+        predictions, conf_interval, aic_val, bic_val = demo_testing(training_df=training_df, testing_df=testing_df,
+                                                                    best_model_cfg=best_model_params, best_regressors=best_regressors,
+                                                                    seasonality=seasonality, project=project_name)
+
+        point_assessment(project_name=project_name, predicted_vals=predictions, conf_intervals=conf_interval,
+                         real_values=testing_df["SQALE_INDEX"], seasonality=seasonality)
         assessment_vals = assessment_metrics(predictions=predictions, real_values=testing_df["SQALE_INDEX"].tolist())
 
     except np.linalg.LinAlgError:  # In case there is some lineal algebra decomposition error
@@ -172,9 +228,9 @@ def tsa_model_demo(seasonality):
 
     # Check if Seasonality is taken into consideration
     if seasonality == True:
-        output_directory = "sarimax_demo"
+        output_directory = "sarimax_demo_0"
     else:
-        output_directory = "arimax_demo"
+        output_directory = "arimax_demo_0"
 
     biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data")
     output_path = os.path.join(DATA_PATH, output_directory)
@@ -219,8 +275,8 @@ def tsa_model_demo(seasonality):
 
 def main():
 
-    tsa_model_demo(seasonality=True)
-    # tsa_model_demo(seasonality=False)
+    #tsa_model_demo(seasonality=True)
+    tsa_model_demo(seasonality=False)
 
 
 if __name__ == '__main__':

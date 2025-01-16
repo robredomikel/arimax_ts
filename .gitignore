@@ -6,6 +6,8 @@ td_V2.db
 codes/draft.ipynb
 replication-package.zip
 
+data/*
+
 codes/__pycache__/
 codes/pred_log.err
 codes/pred_log.out

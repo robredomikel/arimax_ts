@@ -118,22 +118,22 @@ def check_encoding(path):
 
 def MAPE(predicted_vals, testing_vals):
     y_true, y_pred = np.array(testing_vals), np.array(predicted_vals)
-    return np.mean(np.abs((y_true - y_pred)/y_true)) * 100
+    return round(np.mean(np.abs((y_true - y_pred)/y_true)) * 100, 2)
 
 
 def MAE(predicted_vals, testing_vals):
     y_true, y_pred = np.array(testing_vals), np.array(predicted_vals)
-    return np.mean(np.abs((y_true - y_pred)))
+    return round(np.mean(np.abs((y_true - y_pred))), 2)
 
 
 def MSE(predicted_vals, testing_vals):
     y_true, y_pred = np.array(testing_vals), np.array(predicted_vals)
-    return mean_squared_error(y_true, y_pred)
+    return round(mean_squared_error(y_true, y_pred), 2)
 
 
 def RMSE(predicted_vals, testing_vals):
     y_true, y_pred = np.array(testing_vals), np.array(predicted_vals)
-    return np.sqrt(MSE(y_true, y_pred))
+    return round(np.sqrt(MSE(y_true, y_pred)), 2)
 
 
 def assessmentMetrics(predicted_vals, testing_vals, pro_name):
@@ -218,7 +218,8 @@ def create_diagnostics(seasonality, periodicity, best_model_params, best_regress
     else:
         diagnostics_path = os.path.join(DATA_PATH, f'model_diagnostic_plot')
 
-
+    sarimax_path = os.path.join(diagnostics_path, "sarimax")
+    arimax_path = os.path.join(diagnostics_path, "arimax")
 
     # Perform seasonal decomposition plots for all projects
     if not os.path.exists(diagnostics_path):
@@ -228,8 +229,8 @@ def create_diagnostics(seasonality, periodicity, best_model_params, best_regress
         os.mkdir(os.path.join(diagnostics_path, "sarimax", "biweekly"))
         os.mkdir(os.path.join(diagnostics_path, "arimax", "biweekly"))
     else:
-        sarimax_path = os.path.join(diagnostics_path, "sarimax")
-        arimax_path = os.path.join(diagnostics_path, "arimax")
+        os.mkdir(os.path.join(diagnostics_path, "sarimax"))
+        os.mkdir(os.path.join(diagnostics_path, "arimax"))
         os.mkdir(os.path.join(diagnostics_path, "sarimax", "biweekly"))
         os.mkdir(os.path.join(diagnostics_path, "arimax", "biweekly"))
 
