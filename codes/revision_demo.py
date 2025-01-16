@@ -277,10 +277,10 @@ def generate_project_normalized_mape_boxplots(output_path, seasonality):
     plt.figure(figsize=(12, 6))
     sns.boxplot(x="Observation", y="Normalized MAPE", data=normalized_mape_df, palette="Blues", showfliers=False)
     if seasonality:
-        plt.title("Normalized MAPE Boxplot Per Monthly Observation Across Projects - SARIMAX")
+        plt.title("Normalized MAPE Boxplot Per Monthly Observation Across Projects (Based on number of projects) - SARIMAX")
         plt.xlabel("Monthly Observation Index")
     else:
-        plt.title("Normalized MAPE Boxplot Per Biweekly Observation Across Projects - ARIMAX")
+        plt.title("Normalized MAPE Boxplot Per Biweekly Observation Across Projects (Based on number of projects) - ARIMAX")
         plt.xlabel("Biweekly Observation Index")
 
     plt.ylabel("Normalized MAPE")
@@ -294,16 +294,78 @@ def generate_project_normalized_mape_boxplots(output_path, seasonality):
     print(f"> Normalized MAPE boxplot saved at {plot_path}")
 
 
+def generate_absolute_error_normalized_mape_boxplots(output_path, seasonality):
+    """
+    Generate boxplots for MAPE values per biweekly observation across all projects.
+    Normalization is based on the mean of absolute errors at each time point.
+    """
+
+    # Define paths
+    results_dir = os.path.join(output_path, "point_assessment")
+
+    # Collect MAPE and absolute error data
+    mape_data = []
+    abs_error_data = []
+    project_files = [f for f in os.listdir(results_dir) if f.endswith(".csv")]
+
+    for file in project_files:
+        project_path = os.path.join(results_dir, file)
+        project_df = pd.read_csv(project_path)
+
+        # Collect MAPE and absolute error values for each project
+        for i, row in project_df.iterrows():
+            mape_data.append({"Observation": i + 1, "MAPE": row["mape"], "Project": file[:-4]})
+            abs_error_data.append({"Observation": i + 1, "AbsError": row["abs_error"], "Project": file[:-4]})
+
+    # Create DataFrames for MAPE and absolute errors
+    mape_df = pd.DataFrame(mape_data)
+    abs_error_df = pd.DataFrame(abs_error_data)
+
+    # Normalize MAPE by the mean of absolute errors at each observation
+    normalized_mape_data = []
+    for observation, group in mape_df.groupby("Observation"):
+        abs_error_group = abs_error_df[abs_error_df["Observation"] == observation]
+        mean_abs_error = abs_error_group["AbsError"].mean()  # Calculate mean absolute error
+
+        if mean_abs_error > 0:  # Avoid division by zero
+            group["Normalized MAPE"] = group["MAPE"] / mean_abs_error
+            normalized_mape_data.append(group)
+
+    # Concatenate normalized data
+    normalized_mape_df = pd.concat(normalized_mape_data)
+
+    # Limit timepoints to 36 (for seasonality=True) or 72 (for seasonality=False)
+    max_timepoints = 36 if seasonality else 72
+    normalized_mape_df = normalized_mape_df[normalized_mape_df["Observation"] < max_timepoints]
+
+    # Plot boxplots for each observation
+    plt.figure(figsize=(12, 6))
+    sns.boxplot(x="Observation", y="Normalized MAPE", data=normalized_mape_df, palette="Blues", showfliers=False)
+    if seasonality:
+        plt.title("Normalized MAPE Boxplot Per Monthly Observation (Based on Mean Absolute Error) - SARIMAX")
+        plt.xlabel("Monthly Observation Index")
+    else:
+        plt.title("Normalized MAPE Boxplot Per Biweekly Observation (Based on Mean Absolute Error) - ARIMAX")
+        plt.xlabel("Biweekly Observation Index")
+
+    plt.ylabel("Normalized MAPE")
+    plt.xticks(rotation=45)
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+
+    # Save and show the plot
+    plot_path = os.path.join(output_path, "mape_boxplot_based_on_mean_abs_error.pdf")
+    plt.savefig(plot_path)
+    plt.show()
+    print(f"> Boxplot saved at {plot_path}")
+
+
 def generate_mape_boxplots(output_path, seasonality):
     """
     Generate boxplots for MAPE values per biweekly observation across all projects.
     """
 
     # Define paths
-    if seasonality:
-        results_dir = os.path.join(output_path, "point_assessment")
-    else:
-        results_dir = os.path.join(output_path, "point_assessment")
+    results_dir = os.path.join(output_path, "point_assessment")
 
     # Collect MAPE data
     mape_data = []
@@ -315,10 +377,14 @@ def generate_mape_boxplots(output_path, seasonality):
 
         # Extract biweekly observation indices and MAPE values
         for i, row in project_df.iterrows():
-            mape_data.append({"Observation": i, "MAPE": row["mape"], "Project": file[:-4]})
+            mape_data.append({"Observation": i + 1, "MAPE": row["mape"], "Project": file[:-4]})
 
     # Create a DataFrame for visualization
     mape_df = pd.DataFrame(mape_data)
+
+    # Limit the number of observations to 36 (seasonality=True) or 72 (seasonality=False)
+    max_observations = 36 if seasonality else 72
+    mape_df = mape_df[mape_df["Observation"] <= max_observations]
 
     # Plot boxplots for each observation
     plt.figure(figsize=(12, 6))
@@ -335,10 +401,7 @@ def generate_mape_boxplots(output_path, seasonality):
     plt.grid(axis="y", linestyle="--", alpha=0.7)
 
     # Save and show the plot
-    if seasonality:
-        plot_path = os.path.join(output_path, "mape_boxplot.pdf")
-    else:
-        plot_path = os.path.join(output_path, "mape_boxplot.pdf")
+    plot_path = os.path.join(output_path, "mape_boxplot.pdf")
     plt.savefig(plot_path)
     plt.show()
     print(f"> Boxplot saved at {plot_path}")
@@ -367,12 +430,12 @@ def generate_mini_mape_boxplot(output_path, seasonality):
         min_observations = min(min_observations, len(project_df))
         # Extract biweekly observation indices and MAPE values
         for i, row in project_df.iterrows():
-            if i < min_observations:
-                mape_data.append({"Observation": i, "MAPE": row["mape"], "Project": file[:-4]})
+            if i <= min_observations:
+                mape_data.append({"Observation": i+1, "MAPE": row["mape"], "Project": file[:-4]})
 
     # Create a DataFrame for visualization
     mape_df = pd.DataFrame(mape_data)
-    mape_df = mape_df[mape_df["Observation"] < min_observations]
+    mape_df = mape_df[mape_df["Observation"] <= min_observations]
 
     # Plot boxplots for each observation
     plt.figure(figsize=(12, 6))
@@ -411,7 +474,7 @@ def tsa_model_demo(seasonality):
 
     biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data")
     output_path = os.path.join(DATA_PATH, output_directory)
-
+    """
     if not os.path.exists(output_path):
         os.mkdir(output_path)
         os.mkdir(os.path.join(output_path, "biweekly_results"))
@@ -449,11 +512,12 @@ def tsa_model_demo(seasonality):
         print("> SARIMAX stage performed!")
     else:
         print("> ARIMAX stage performed!")
-
+    """
     # Generate boxplot for MAPE values
     generate_mape_boxplots(output_path, seasonality)
     generate_mini_mape_boxplot(output_path, seasonality)
-    generate_project_normalized_mape_boxplots(output_path, seasonality)
+    #generate_project_normalized_mape_boxplots(output_path, seasonality)
+    #generate_absolute_error_normalized_mape_boxplots(output_path, seasonality)
 
 
 def analyze_distance_and_plot(output_path, seasonality):
