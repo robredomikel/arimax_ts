@@ -359,6 +359,85 @@ def generate_absolute_error_normalized_mape_boxplots(output_path, seasonality):
     print(f"> Boxplot saved at {plot_path}")
 
 
+def generate_abs_error_boxplots(output_path, seasonality, style):
+    """
+    Generate boxplots for absolute error (abs_error) values per biweekly observation across all projects.
+    """
+
+    # Define paths
+    results_dir = os.path.join(output_path, "point_assessment")
+
+    # Collect absolute error (abs_error) data
+    abs_error_data = []
+    project_files = [f for f in os.listdir(results_dir) if f.endswith(".csv")]
+
+    for file in project_files:
+        project_path = os.path.join(results_dir, file)
+        project_df = pd.read_csv(project_path)
+
+        max_abs_error = project_df["abs_error"].max()
+        # Extract biweekly observation indices and abs_error values
+        for i, row in project_df.iterrows():
+            if style == "%":
+                abs_error_data.append({"Observation": i + 1, "AbsError": row["abs_error"] * 100 / max_abs_error, "Project": file[:-4]})
+            elif style == "0-1":
+                abs_error_data.append({"Observation": i + 1, "AbsError": row["abs_error"] / max_abs_error, "Project": file[:-4]})
+            else:
+                abs_error_data.append(
+                    {"Observation": i + 1, "AbsError": row["abs_error"], "Project": file[:-4]})
+
+
+    # Create a DataFrame for visualization
+    abs_error_df = pd.DataFrame(abs_error_data)
+
+    # Limit the number of observations to 36 (seasonality=True) or 72 (seasonality=False)
+    max_observations = 36 if seasonality else 72
+    abs_error_df = abs_error_df[abs_error_df["Observation"] <= max_observations]
+
+    # Plot boxplots for each observation
+    plt.figure(figsize=(12, 6))
+    sns.boxplot(x="Observation", y="AbsError", data=abs_error_df, palette="Blues", showfliers=False)
+    if seasonality:
+        if style == "%":
+            plt.title(f"Absolute Error (%) Boxplot Per Monthly Observation Across Projects - SARIMAX")
+            plt.ylabel("Absolute Error (%)")
+        elif style == "0-1":
+            plt.title(f"Absolute Error (0-1) Boxplot Per Monthly Observation Across Projects - SARIMAX")
+            plt.ylabel("Absolute Error (0-1)")
+        else:
+            plt.title(f"Absolute Error Boxplot Per Monthly Observation Across Projects - SARIMAX")
+            plt.ylabel("Absolute Error")
+
+        plt.xlabel("Monthly Observation Index")
+
+    else:
+        if style == "%":
+            plt.title(f"Absolute Error (%) Boxplot Per Biweekly Observation Across Projects - ARIMAX")
+            plt.ylabel("Absolute Error (%)")
+        elif style == "0-1":
+            plt.title(f"Absolute Error (0-1) Boxplot Per Biweekly Observation Across Projects - ARIMAX")
+            plt.ylabel("Absolute Error (0-1)")
+        else:
+            plt.title(f"Absolute Error Boxplot Per Biweekly Observation Across Projects - ARIMAX")
+            plt.ylabel("Absolute Error")
+
+        plt.xlabel("Biweekly Observation Index")
+
+    plt.xticks(rotation=45)
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+
+    # Save and show the plot
+    if style == "%":
+        plot_path = os.path.join(output_path, "abs_%_error_boxplot.pdf")
+    elif style == "0-1":
+        plot_path = os.path.join(output_path, "abs_0-1_error_boxplot.pdf")
+    else:
+        plot_path = os.path.join(output_path, "abs_error_boxplot.pdf")
+    plt.savefig(plot_path)
+    plt.show()
+    print(f"> Boxplot saved at {plot_path}")
+
+
 def generate_mape_boxplots(output_path, seasonality):
     """
     Generate boxplots for MAPE values per biweekly observation across all projects.
@@ -514,10 +593,13 @@ def tsa_model_demo(seasonality):
         print("> ARIMAX stage performed!")
     """
     # Generate boxplot for MAPE values
-    generate_mape_boxplots(output_path, seasonality)
-    generate_mini_mape_boxplot(output_path, seasonality)
+    #generate_mape_boxplots(output_path, seasonality)
+    #generate_mini_mape_boxplot(output_path, seasonality)
     #generate_project_normalized_mape_boxplots(output_path, seasonality)
     #generate_absolute_error_normalized_mape_boxplots(output_path, seasonality)
+    generate_abs_error_boxplots(output_path, seasonality, style="normal")
+    generate_abs_error_boxplots(output_path, seasonality, style="%")
+    generate_abs_error_boxplots(output_path, seasonality, style="0-1")
 
 
 def analyze_distance_and_plot(output_path, seasonality):
