@@ -359,10 +359,103 @@ def generate_absolute_error_normalized_mape_boxplots(output_path, seasonality):
     print(f"> Boxplot saved at {plot_path}")
 
 
+def generate_normalized_abs_error_boxplots(output_path, seasonality, style):
+    """
+    Generate boxplots for normalized absolute error (abs_error) values per biweekly observation across all projects.
+    Normalization is dynamically adjusted based on the number of active projects at each observation.
+    """
+
+    # Define paths
+    results_dir = os.path.join(output_path, "point_assessment")
+
+    # Collect absolute error (abs_error) data
+    abs_error_data = []
+    project_files = [f for f in os.listdir(results_dir) if f.endswith(".csv")]
+
+    max_observations = 36 if seasonality else 72
+    observation_totals = {i: 0 for i in range(1, max_observations + 1)}  # Initialize observation counts
+
+    for file in project_files:
+        project_path = os.path.join(results_dir, file)
+        project_df = pd.read_csv(project_path)
+
+        max_abs_error = project_df["abs_error"].max()  # Find max error for normalization
+
+        # Extract observation indices and absolute error values
+        for i, row in project_df.iterrows():
+            obs_index = i + 1  # Convert zero-based index to one-based
+            if obs_index > max_observations:
+                break  # Stop if the observation index exceeds the limit
+
+            if style == "%":
+                normalized_error = (row["abs_error"] * 100) / max_abs_error
+            elif style == "0-1":
+                normalized_error = row["abs_error"] / max_abs_error
+            else:
+                normalized_error = row["abs_error"]
+
+            abs_error_data.append({"Observation": obs_index, "AbsError": normalized_error, "Project": file[:-4]})
+            observation_totals[obs_index] += 1  # Increment the count for this observation index
+
+    # Create a DataFrame for visualization
+    abs_error_df = pd.DataFrame(abs_error_data)
+
+    # Normalize absolute errors based on the number of active projects at each observation
+    normalized_data = []
+    for obs_index, group in abs_error_df.groupby("Observation"):
+        active_projects = observation_totals[obs_index]
+        if active_projects > 0:
+            group["AbsError"] = group["AbsError"] / active_projects
+            normalized_data.append(group)
+
+    # Concatenate normalized data
+    normalized_abs_error_df = pd.concat(normalized_data)
+
+    # Plot boxplots for each observation
+    plt.figure(figsize=(12, 6))
+    sns.boxplot(x="Observation", y="AbsError", data=normalized_abs_error_df, palette="Blues", showfliers=False)
+
+    # Set plot titles and labels
+    if seasonality:
+        if style == "%":
+            plt.title("Normalized Absolute Error (%) Boxplot Per Monthly Observation Across Projects - SARIMAX")
+            plt.ylabel("Normalized Absolute Error (%)")
+        elif style == "0-1":
+            plt.title("Normalized Absolute Error (0-1) Boxplot Per Monthly Observation Across Projects - SARIMAX")
+            plt.ylabel("Normalized Absolute Error (0-1)")
+        else:
+            plt.title("Normalized Absolute Error Boxplot Per Monthly Observation Across Projects - SARIMAX")
+            plt.ylabel("Normalized Absolute Error")
+        plt.xlabel("Monthly Observation Index")
+    else:
+        if style == "%":
+            plt.title("Normalized Absolute Error (%) Boxplot Per Biweekly Observation Across Projects - ARIMAX")
+            plt.ylabel("Normalized Absolute Error (%)")
+        elif style == "0-1":
+            plt.title("Normalized Absolute Error (0-1) Boxplot Per Biweekly Observation Across Projects - ARIMAX")
+            plt.ylabel("Normalized Absolute Error (0-1)")
+        else:
+            plt.title("Normalized Absolute Error Boxplot Per Biweekly Observation Across Projects - ARIMAX")
+            plt.ylabel("Normalized Absolute Error")
+        plt.xlabel("Biweekly Observation Index")
+
+    plt.xticks(rotation=45)
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+
+    # Save and show the plot
+    if style == "%":
+        plot_path = os.path.join(output_path, "normalized_abs_%_error_boxplot.pdf")
+    elif style == "0-1":
+        plot_path = os.path.join(output_path, "normalized_abs_0-1_error_boxplot.pdf")
+    else:
+        plot_path = os.path.join(output_path, "normalized_abs_error_boxplot.pdf")
+    plt.savefig(plot_path)
+    plt.show()
+    print(f"> Normalized boxplot saved at {plot_path}")
+
+
+"""
 def generate_abs_error_boxplots(output_path, seasonality, style):
-    """
-    Generate boxplots for absolute error (abs_error) values per biweekly observation across all projects.
-    """
 
     # Define paths
     results_dir = os.path.join(output_path, "point_assessment")
@@ -436,7 +529,7 @@ def generate_abs_error_boxplots(output_path, seasonality, style):
     plt.savefig(plot_path)
     plt.show()
     print(f"> Boxplot saved at {plot_path}")
-
+"""
 
 def generate_mape_boxplots(output_path, seasonality):
     """
@@ -597,9 +690,10 @@ def tsa_model_demo(seasonality):
     #generate_mini_mape_boxplot(output_path, seasonality)
     #generate_project_normalized_mape_boxplots(output_path, seasonality)
     #generate_absolute_error_normalized_mape_boxplots(output_path, seasonality)
-    generate_abs_error_boxplots(output_path, seasonality, style="normal")
-    generate_abs_error_boxplots(output_path, seasonality, style="%")
-    generate_abs_error_boxplots(output_path, seasonality, style="0-1")
+    generate_normalized_abs_error_boxplots(output_path, seasonality, style="normal")
+    generate_normalized_abs_error_boxplots(output_path, seasonality, style="%")
+    generate_normalized_abs_error_boxplots(output_path, seasonality, style="0-1")
+    # generate_table_statistics(output_path, seasonality)
 
 
 def analyze_distance_and_plot(output_path, seasonality):
