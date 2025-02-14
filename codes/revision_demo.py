@@ -229,7 +229,7 @@ def arimax_model(df_path, project_name, periodicity, seasonality):
 
 def generate_project_normalized_mape_boxplots(output_path, seasonality):
     """
-    Generate boxplots for MAPE values per biweekly observation across all projects.
+    Generate boxplots for MAPE values across all projects.
     Normalize MAPE values by the number of analyzed repositories,
     dynamically adjusting for projects that stop contributing data.
     """
@@ -296,7 +296,7 @@ def generate_project_normalized_mape_boxplots(output_path, seasonality):
 
 def generate_absolute_error_normalized_mape_boxplots(output_path, seasonality):
     """
-    Generate boxplots for MAPE values per biweekly observation across all projects.
+    Generate boxplots for MAPE values across all projects.
     Normalization is based on the mean of absolute errors at each time point.
     """
 
@@ -365,55 +365,67 @@ def generate_normalized_abs_error_boxplots(output_path, seasonality, style):
     Normalization is dynamically adjusted based on the number of active projects at each observation.
     """
 
+    max_observations = 36 if seasonality else 72
+    observation_totals = {i: 0 for i in range(1, max_observations + 1)}  # Initialize observation counts
+
     # Define paths
     results_dir = os.path.join(output_path, "point_assessment")
 
-    # Collect absolute error (abs_error) data
-    abs_error_data = []
-    project_files = [f for f in os.listdir(results_dir) if f.endswith(".csv")]
+    # Initialize dictionary to store absolute errors by observation
+    abs_error_by_obs = {}
 
-    max_observations = 36 if seasonality else 72
-    observation_totals = {i: 0 for i in range(1, max_observations + 1)}  # Initialize observation counts
+    # Collect absolute error (abs_error) data across projects
+    project_files = [f for f in os.listdir(results_dir) if f.endswith(".csv")]
 
     for file in project_files:
         project_path = os.path.join(results_dir, file)
         project_df = pd.read_csv(project_path)
 
-        max_abs_error = project_df["abs_error"].max()  # Find max error for normalization
-
-        # Extract observation indices and absolute error values
+        # Extract absolute error values for each observation
         for i, row in project_df.iterrows():
             obs_index = i + 1  # Convert zero-based index to one-based
-            if obs_index > max_observations:
-                break  # Stop if the observation index exceeds the limit
+            if obs_index not in abs_error_by_obs:
+                abs_error_by_obs[obs_index] = []
+            abs_error_by_obs[obs_index].append(row["abs_error"])
+            observation_totals[obs_index] += 1  # Update active project count
 
-            if style == "%":
-                normalized_error = (row["abs_error"] * 100) / max_abs_error
-            elif style == "0-1":
-                normalized_error = row["abs_error"] / max_abs_error
+    # Calculate the maximum and minimum absolute error at each observation across all projects
+    max_abs_errors_by_obs = {obs: max(errors) for obs, errors in abs_error_by_obs.items()}
+    min_abs_errors_by_obs = {obs: min(errors) for obs, errors in abs_error_by_obs.items()}
+
+    # Collect normalized absolute error data
+    abs_error_data = []
+    for file in project_files:
+        project_path = os.path.join(results_dir, file)
+        project_df = pd.read_csv(project_path)
+
+        for i, row in project_df.iterrows():
+            obs_index = i + 1  # Convert zero-based index to one-based
+            max_abs_error = max_abs_errors_by_obs.get(obs_index, 1)  # Avoid division by zero
+            min_abs_error = min_abs_errors_by_obs.get(obs_index, 1)  # Avoid division by zero
+            abs_error = row["abs_error"]
+
+            if max_abs_error != min_abs_error:
+                if style == "%":
+                    normalized_error = ((abs_error - min_abs_error) / (max_abs_error - min_abs_error)) * 100
+                elif style == "0-1":
+                    normalized_error = (abs_error - min_abs_error) / (max_abs_error - min_abs_error)
+                else:
+                    normalized_error = abs_error
             else:
-                normalized_error = row["abs_error"]
+                normalized_error = 0  # If range is zero, set normalized value to 0
 
             abs_error_data.append({"Observation": obs_index, "AbsError": normalized_error, "Project": file[:-4]})
-            observation_totals[obs_index] += 1  # Increment the count for this observation index
 
     # Create a DataFrame for visualization
     abs_error_df = pd.DataFrame(abs_error_data)
 
-    # Normalize absolute errors based on the number of active projects at each observation
-    normalized_data = []
-    for obs_index, group in abs_error_df.groupby("Observation"):
-        active_projects = observation_totals[obs_index]
-        if active_projects > 0:
-            group["AbsError"] = group["AbsError"] / active_projects
-            normalized_data.append(group)
-
-    # Concatenate normalized data
-    normalized_abs_error_df = pd.concat(normalized_data)
+    # Limit the number of observations to 36 (seasonality=True) or 72 (seasonality=False)
+    abs_error_df = abs_error_df[abs_error_df["Observation"] <= max_observations]
 
     # Plot boxplots for each observation
     plt.figure(figsize=(12, 6))
-    sns.boxplot(x="Observation", y="AbsError", data=normalized_abs_error_df, palette="Blues", showfliers=False)
+    sns.boxplot(x="Observation", y="AbsError", data=abs_error_df, palette="Blues", showfliers=False)
 
     # Set plot titles and labels
     if seasonality:
@@ -454,31 +466,56 @@ def generate_normalized_abs_error_boxplots(output_path, seasonality, style):
     print(f"> Normalized boxplot saved at {plot_path}")
 
 
-"""
 def generate_abs_error_boxplots(output_path, seasonality, style):
+    """
+    Generate boxplots for absolute error (abs_error) values per time period across projects.
+    Normalization is performed based on the maximum absolute error at each observation across all projects.
+    """
 
     # Define paths
     results_dir = os.path.join(output_path, "point_assessment")
 
-    # Collect absolute error (abs_error) data
-    abs_error_data = []
+    # Initialize dictionary to store absolute errors by observation
+    abs_error_by_obs = {}
+
+    # Collect absolute error (abs_error) data across projects
     project_files = [f for f in os.listdir(results_dir) if f.endswith(".csv")]
 
     for file in project_files:
         project_path = os.path.join(results_dir, file)
         project_df = pd.read_csv(project_path)
 
-        max_abs_error = project_df["abs_error"].max()
-        # Extract biweekly observation indices and abs_error values
+        # Extract absolute error values for each observation
         for i, row in project_df.iterrows():
-            if style == "%":
-                abs_error_data.append({"Observation": i + 1, "AbsError": row["abs_error"] * 100 / max_abs_error, "Project": file[:-4]})
-            elif style == "0-1":
-                abs_error_data.append({"Observation": i + 1, "AbsError": row["abs_error"] / max_abs_error, "Project": file[:-4]})
-            else:
-                abs_error_data.append(
-                    {"Observation": i + 1, "AbsError": row["abs_error"], "Project": file[:-4]})
+            obs_index = i + 1  # Convert zero-based index to one-based
+            if obs_index not in abs_error_by_obs:
+                abs_error_by_obs[obs_index] = []
+            abs_error_by_obs[obs_index].append(row["abs_error"])
 
+    # Calculate the maximum and min absolute error at each observation across all projects
+    max_abs_errors_by_obs = {obs: max(errors) for obs, errors in abs_error_by_obs.items()}
+    min_abs_errors_by_obs = {obs: min(errors) for obs, errors in abs_error_by_obs.items()}
+
+    # Collect normalized absolute error data
+    abs_error_data = []
+    for file in project_files:
+        project_path = os.path.join(results_dir, file)
+        project_df = pd.read_csv(project_path)
+
+        for i, row in project_df.iterrows():
+            obs_index = i + 1  # Convert zero-based index to one-based
+            max_abs_error = max_abs_errors_by_obs.get(obs_index, 1)  # Avoid division by zero
+            min_abs_error = min_abs_errors_by_obs.get(obs_index, 1)  # Avoid division by zero
+            abs_error = row["abs_error"]
+
+            if style == "%":
+                normalized_error = ((abs_error - min_abs_error) / (max_abs_error - min_abs_error))*100
+            elif style == "0-1":
+                normalized_error = (abs_error - min_abs_error) / (max_abs_error - min_abs_error)
+            else:
+                normalized_error = abs_error
+
+            abs_error_data.append({"Observation": obs_index, "AbsError": normalized_error, "Project": file[:-4]})
 
     # Create a DataFrame for visualization
     abs_error_df = pd.DataFrame(abs_error_data)
@@ -490,30 +527,29 @@ def generate_abs_error_boxplots(output_path, seasonality, style):
     # Plot boxplots for each observation
     plt.figure(figsize=(12, 6))
     sns.boxplot(x="Observation", y="AbsError", data=abs_error_df, palette="Blues", showfliers=False)
+
+    # Set plot titles and labels
     if seasonality:
         if style == "%":
-            plt.title(f"Absolute Error (%) Boxplot Per Monthly Observation Across Projects - SARIMAX")
+            plt.title("Absolute Error (%) Boxplot Per Monthly Observation Across Projects - SARIMAX")
             plt.ylabel("Absolute Error (%)")
         elif style == "0-1":
-            plt.title(f"Absolute Error (0-1) Boxplot Per Monthly Observation Across Projects - SARIMAX")
+            plt.title("Absolute Error (0-1) Boxplot Per Monthly Observation Across Projects - SARIMAX")
             plt.ylabel("Absolute Error (0-1)")
         else:
-            plt.title(f"Absolute Error Boxplot Per Monthly Observation Across Projects - SARIMAX")
+            plt.title("Absolute Error Boxplot Per Monthly Observation Across Projects - SARIMAX")
             plt.ylabel("Absolute Error")
-
         plt.xlabel("Monthly Observation Index")
-
     else:
         if style == "%":
-            plt.title(f"Absolute Error (%) Boxplot Per Biweekly Observation Across Projects - ARIMAX")
+            plt.title("Absolute Error (%) Boxplot Per Biweekly Observation Across Projects - ARIMAX")
             plt.ylabel("Absolute Error (%)")
         elif style == "0-1":
-            plt.title(f"Absolute Error (0-1) Boxplot Per Biweekly Observation Across Projects - ARIMAX")
+            plt.title("Absolute Error (0-1) Boxplot Per Biweekly Observation Across Projects - ARIMAX")
             plt.ylabel("Absolute Error (0-1)")
         else:
-            plt.title(f"Absolute Error Boxplot Per Biweekly Observation Across Projects - ARIMAX")
+            plt.title("Absolute Error Boxplot Per Biweekly Observation Across Projects - ARIMAX")
             plt.ylabel("Absolute Error")
-
         plt.xlabel("Biweekly Observation Index")
 
     plt.xticks(rotation=45)
@@ -529,11 +565,11 @@ def generate_abs_error_boxplots(output_path, seasonality, style):
     plt.savefig(plot_path)
     plt.show()
     print(f"> Boxplot saved at {plot_path}")
-"""
+
 
 def generate_mape_boxplots(output_path, seasonality):
     """
-    Generate boxplots for MAPE values per biweekly observation across all projects.
+    Generate boxplots for MAPE values across all projects.
     """
 
     # Define paths
@@ -633,6 +669,119 @@ def generate_mini_mape_boxplot(output_path, seasonality):
     print(f"> Boxplot saved at {plot_path}")
 
 
+# Function to calculate statistics
+def calculate_statistics(data_dict, seasonality):
+    statistics_data = []
+    i = 0
+    for period, metrics in data_dict.items():
+
+        if seasonality and i == 36:
+            break
+        elif i == 72:
+            break
+
+        if seasonality:
+            stats = {
+                "Time-period (Monthly)": period,
+                "Mean": round(np.mean(metrics), 2),
+                "Median": round(np.median(metrics), 2),
+                "Max": round(np.max(metrics), 2),
+                "Min": round(np.min(metrics), 2),
+                "Variance": round(np.var(metrics, ddof=1), 2)  # ddof=1 for sample variance
+            }
+        else:
+            stats = {
+                "Time-period (Biweekly)": period,
+                "Mean": round(np.mean(metrics), 2),
+                "Median": round(np.median(metrics), 2),
+                "Max": round(np.max(metrics), 2),
+                "Min": round(np.min(metrics), 2),
+                "Variance": round(np.var(metrics, ddof=1), 2)  # ddof=1 for sample variance
+            }
+        statistics_data.append(stats)
+        i += 1
+
+    if seasonality:
+        return pd.DataFrame(statistics_data).sort_values(by="Time-period (Monthly)")
+    else:
+        return pd.DataFrame(statistics_data).sort_values(by="Time-period (Biweekly)")
+
+
+def generate_table_statistics(output_path, seasonality, metric):
+    """Generates table of statistics in csv based on graphs already displayed"""
+
+    # Define the results directory based on seasonality
+    results_dir = os.path.join(output_path, "point_assessment")
+
+    # List all project result files
+    project_files = [f for f in os.listdir(results_dir) if f.endswith(".csv")]
+
+    abs_error_by_obs = {}
+    for file in project_files:
+        project_path = os.path.join(results_dir, file)
+        project_df = pd.read_csv(project_path)
+
+        # Extract absolute error values for each observation
+        for i, row in project_df.iterrows():
+            if (seasonality and i + 1 > 36) or (not seasonality and i + 1 > 72):
+                break  # Skip observations beyond the limit
+            obs_index = i + 1  # Convert zero-based index to one-based
+            if obs_index not in abs_error_by_obs:
+                abs_error_by_obs[obs_index] = []
+            abs_error_by_obs[obs_index].append(row["abs_error"])
+
+    # Calculate the maximum and min absolute error at each observation across all projects
+    max_abs_errors_by_obs = {obs: max(errors) for obs, errors in abs_error_by_obs.items()}
+    min_abs_errors_by_obs = {obs: min(errors) for obs, errors in abs_error_by_obs.items()}
+
+    # Initialize dictionaries to store data by time period
+    original_data = {}
+    normalized_data_0_1 = {}
+    normalized_data_percentage = {}
+
+    for file in project_files:
+        project_path = os.path.join(results_dir, file)
+        project_df = pd.read_csv(project_path)
+
+        for i, row in project_df.iterrows():
+            period = i + 1  # Adjust to 1-based indexing
+            abs_error = row[metric]
+
+            if period not in original_data:
+                original_data[period] = []
+                normalized_data_0_1[period] = []
+                normalized_data_percentage[period] = []
+
+            # Collect absolute errors in different units
+            original_data[period].append(abs_error)
+            max_abs_error = max_abs_errors_by_obs.get(period, 1)  # Avoid division by zero
+            min_abs_error = min_abs_errors_by_obs.get(period, 1)  # Avoid division by zero
+            normalized_data_0_1[period].append((abs_error - min_abs_error) / (max_abs_error - min_abs_error))
+            normalized_data_percentage[period].append(((abs_error - min_abs_error) / (max_abs_error - min_abs_error))*100)
+
+    # Compute statistics for each data type
+    original_stats_df = calculate_statistics(original_data, seasonality)
+    normalized_0_1_stats_df = calculate_statistics(normalized_data_0_1, seasonality)
+    normalized_percentage_stats_df = calculate_statistics(normalized_data_percentage, seasonality)
+
+    # Save each DataFrame as a CSV file
+    file_suffix = "sarimax" if seasonality else "arimax"
+    os.makedirs(os.path.join(output_path, f"{metric}_table_statistics"), exist_ok=True)
+
+    original_stats_path = os.path.join(output_path, f"{metric}_table_statistics", f"{file_suffix}_original_{metric}_statistics.csv")
+    original_stats_df.to_csv(original_stats_path, index=False)
+    print(f"> Original statistics table saved at: {original_stats_path}")
+
+    if metric == "abs_error":
+        normalized_0_1_path = os.path.join(output_path, f"{metric}_table_statistics", f"{file_suffix}_normalized_0_1_{metric}_statistics.csv")
+        normalized_0_1_stats_df.to_csv(normalized_0_1_path, index=False)
+        print(f"> 0-1 Normalized statistics table saved at: {normalized_0_1_path}")
+
+        normalized_percentage_path = os.path.join(output_path, f"{metric}_table_statistics", f"{file_suffix}_percentage_{metric}_statistics.csv")
+        normalized_percentage_stats_df.to_csv(normalized_percentage_path, index=False)
+        print(f"> Percentage statistics table saved at: {normalized_percentage_path}")
+
+
 def tsa_model_demo(seasonality):
     """
     Executes the tsa process
@@ -646,7 +795,7 @@ def tsa_model_demo(seasonality):
 
     biweekly_data_path = os.path.join(DATA_PATH, "biweekly_data")
     output_path = os.path.join(DATA_PATH, output_directory)
-    """
+
     if not os.path.exists(output_path):
         os.mkdir(output_path)
         os.mkdir(os.path.join(output_path, "biweekly_results"))
@@ -684,16 +833,19 @@ def tsa_model_demo(seasonality):
         print("> SARIMAX stage performed!")
     else:
         print("> ARIMAX stage performed!")
-    """
-    # Generate boxplot for MAPE values
-    #generate_mape_boxplots(output_path, seasonality)
-    #generate_mini_mape_boxplot(output_path, seasonality)
-    #generate_project_normalized_mape_boxplots(output_path, seasonality)
-    #generate_absolute_error_normalized_mape_boxplots(output_path, seasonality)
+
+    generate_mape_boxplots(output_path, seasonality)
+    generate_mini_mape_boxplot(output_path, seasonality)
+    generate_project_normalized_mape_boxplots(output_path, seasonality)
+    generate_absolute_error_normalized_mape_boxplots(output_path, seasonality)
+    generate_abs_error_boxplots(output_path, seasonality, style="normal")
+    generate_abs_error_boxplots(output_path, seasonality, style="%")
+    generate_abs_error_boxplots(output_path, seasonality, style="0-1")
     generate_normalized_abs_error_boxplots(output_path, seasonality, style="normal")
     generate_normalized_abs_error_boxplots(output_path, seasonality, style="%")
     generate_normalized_abs_error_boxplots(output_path, seasonality, style="0-1")
-    # generate_table_statistics(output_path, seasonality)
+    generate_table_statistics(output_path, seasonality, metric="abs_error")
+    generate_table_statistics(output_path, seasonality, metric="mape")
 
 
 def analyze_distance_and_plot(output_path, seasonality):
@@ -770,8 +922,8 @@ def main():
 
     tsa_model_demo(seasonality=True)
     tsa_model_demo(seasonality=False)
-    #analyze_distance_and_plot(output_path=os.path.join(DATA_PATH, "sarimax_demo"), seasonality=True)
-    #analyze_distance_and_plot(output_path=os.path.join(DATA_PATH, "arimax_demo"), seasonality=False)
+    analyze_distance_and_plot(output_path=os.path.join(DATA_PATH, "sarimax_demo"), seasonality=True)
+    analyze_distance_and_plot(output_path=os.path.join(DATA_PATH, "arimax_demo"), seasonality=False)
 
 
 if __name__ == '__main__':
