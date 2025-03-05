@@ -1,4 +1,4 @@
-# Replication package for PROMISE submission: *"Exploring the Seasonality Effect in the Code Technical Debt Prediction"*
+# Replication package for the Journal of Systems and Software (JSS) submitted article : *"Evaluating Time-Dependent Methods and Seasonal Effects in Code Technical Debt Prediction"*
 
 This replication package contains all the Python code to conduct the data collection, preprocessing and analysis of this study.
 
@@ -10,9 +10,9 @@ These instructions will get you a copy of the project up and running on your loc
 
 Running the code requires Python3.9. See installation instructions [here](https://www.python.org/downloads/).
 The dependencies needed to run the code are all listed in the file `requirements.txt`. They can be installed using pip:
-```pip install -r requirements.txt```
+```pip install -r requirements.txt```. Such requirements include classic statistics and ML libraries such as _scikit-learn_, _scipy_ or _statsmodels_ among others.
 
-You might also want to consider using [virtual env](https://packaging.python.org/guides/installing-using-pip-and-virtualenv/).
+You might also want to consider using [virtual env](https://packaging.python.org/guides/installing-using-pip-and-virtualenv/). Which we did.
 
 ## Structure of the replication package
 
@@ -43,6 +43,8 @@ The folder `../data/` should contain the following files:
 ```complete_data/```
 ```raw-data/```
 
+Furthermore, if needed, the database file of the Technical Debt dataset is also provided in the replication package as ```td_V2.db``` file.
+
 
 
 
@@ -50,16 +52,15 @@ The folder `../data/` should contain the following files:
 ## Running the code
 
 NOTE 1: Please, find the `DATA_PATH` global variable in the `commons.py` script and define the path where the program should create all the needed results.
+The logic would be that you provide the base path is the location of this replication package in your machine, and you add `data` as the location for the data files.
 
 NOTE 2: The different stages of the study execution are splitted in the ```main.py``` script, from the boolean definitions in
 ```commons.py``` practitioners can decide which stages want to be manipulated or re-executed again without affecting the other stages.
 For a complete execution, set all the boolean global variables to ```True```
 
-Note 3: Python files ```ml_modelling.py```, ```related_work.py``` and ```ts_modelling.py``` execute the same logic behind the implemented python files but instead of using the built-in in functions to execute backward variable selection and parameter-tuning, they perform it hard-coded, therefore consider longer run times if you consider using them.
-
 ### Stage 1: ```PREPROCESSING```
 
-- Executes scrips ```preprocessing.py``` and ```tsDataPreparation.py```.
+- Executes scripts ```preprocessing.py``` and ```tsDataPreparation.py```.
 - In these scripts the raw data from the Technical Debt dataset are converted into project-divided csv files repeated in 
 ```biweekly```, ```monthly``` and ```complete``` format by first performing data cleaning and preprocessing using the techniques
 described in the paper.
@@ -88,5 +89,12 @@ described in the paper.
 ### Stage 6: ```Visualization of the results```
 
 - For the sake of flexibility, multiple visualization options apart from the ones displayed in the paper can be obtained by running all the cells existing in the Jupyter Notebook ```visualization.ipynb```.
+
+
+### Stage 7: ```Long-term forecasting```
+
+- Executes script ```revision_demo.py``` for performing long-term forecasting for both ARIMAX (with _biweekly_ data) ans SARIMAX (with _monthly_ data) given their results in the previous stages of the study. The multiple results should be directly generated 
+in the locations `../data/arimax_demo` and `../data/sarimax_demo` accordingly.  
+
 
 

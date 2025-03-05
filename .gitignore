@@ -11,3 +11,11 @@ data/*
 codes/__pycache__/
 codes/pred_log.err
 codes/pred_log.out
+.Rproj.user
+
+.RData
+.Rhistory
+JSS-TDpred2024.Rproj
+related_work_matrix.csv
+related_work_matrix.xls
+

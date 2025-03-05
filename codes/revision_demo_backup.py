@@ -567,7 +567,6 @@ def generate_abs_error_boxplots(output_path, seasonality, style):
     print(f"> Boxplot saved at {plot_path}")
 
 
-
 def generate_mape_boxplots(output_path, seasonality):
     """
     Generate boxplots for MAPE values across all projects.
@@ -595,27 +594,18 @@ def generate_mape_boxplots(output_path, seasonality):
     max_observations = 36 if seasonality else 72
     mape_df = mape_df[mape_df["Observation"] <= max_observations]
 
-    # Define Times New Roman font
-    csfont = {'fontname': 'Times New Roman'}
-
     # Plot boxplots for each observation
     plt.figure(figsize=(12, 6))
     sns.boxplot(x="Observation", y="MAPE", data=mape_df, palette="Blues", showfliers=False)
+    if seasonality:
+        plt.title("MAPE Boxplot Per Monthly Observation Across Projects - SARIMAX")
+        plt.xlabel("Monthly Observation Index")
+    else:
+        plt.title("MAPE Boxplot Per Biweekly Observation Across Projects - ARIMAX")
+        plt.xlabel("Biweekly Observation Index")
 
-    # Set labels with Times New Roman font
-    periodicity = "Monthly" if seasonality else "Biweekly"
-    plt.xlabel(f"{periodicity} observation index", **csfont, fontsize=16)
-    plt.ylabel("MAPE (%)", **csfont, fontsize=16)
-
-    # Set x-axis ticks selectively (e.g., every 5th tick)
-    observation_ticks = sorted(mape_df["Observation"].unique())  # Get unique observation indices
-    selected_xticks = observation_ticks[::5]  # Select every 5th tick
-    plt.xticks(selected_xticks, **csfont, fontsize=15)
-
-    # Set y-axis font
-    plt.yticks(**csfont)
-
-    # Add grid for readability
+    plt.ylabel("MAPE")
+    plt.xticks(rotation=45)
     plt.grid(axis="y", linestyle="--", alpha=0.7)
 
     # Save and show the plot
@@ -929,9 +919,13 @@ def analyze_distance_and_plot(output_path, seasonality):
     print(f"> Mean distance scatterplot saved at {mean_plot_path}")
 
 
-def long_term_forecasting():
+def main():
 
     tsa_model_demo(seasonality=True)
-    tsa_model_demo(seasonality=False)
-    analyze_distance_and_plot(output_path=os.path.join(DATA_PATH, "sarimax_demo"), seasonality=True)
-    analyze_distance_and_plot(output_path=os.path.join(DATA_PATH, "arimax_demo"), seasonality=False)
+    #tsa_model_demo(seasonality=False)
+    #analyze_distance_and_plot(output_path=os.path.join(DATA_PATH, "sarimax_demo"), seasonality=True)
+    #analyze_distance_and_plot(output_path=os.path.join(DATA_PATH, "arimax_demo"), seasonality=False)
+
+
+if __name__ == '__main__':
+    main()

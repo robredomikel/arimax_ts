@@ -15,7 +15,8 @@ from ml_modelling_backward import ml_models
 from ts_modelling_speed import ts_models
 from related_work_speed import related_models
 from result_combiner import combine_results
-from commons import SARIMAX, RELATED_WORK, ML_MODELS, COMBINE_RESULTS, PREPROCESSING
+from commons import SARIMAX, RELATED_WORK, ML_MODELS, COMBINE_RESULTS, PREPROCESSING, LONG_TERM_FORECASTING
+from revision_demo import long_term_forecasting
 
 
 def main():
@@ -44,6 +45,11 @@ def main():
         combine_results()
 
     # Run cells in visualization Jupyter Notebook
+    # Check visualization.ipynb
+
+    # Long-term forecasting
+    if LONG_TERM_FORECASTING:
+        long_term_forecasting()
 
 
 if __name__ == '__main__':

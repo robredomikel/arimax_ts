@@ -6,13 +6,6 @@ from sklearn.ensemble import RandomForestRegressor
 from commons import DATA_PATH
 from modules import decomposition_plot
 
-# CONSTANTS
-#MULTIVARIATE_PATH = "C:/OULU/TECHDEBT2023/data/multivariate_data.csv"
-#FINAL_FORMAL_PATH = "C:/OULU/TECHDEBT2023/data/final_overall_df.csv"
-#COMPLETE_PATH = "C:/OULU/TECHDEBT2023/data/complete_data"
-#BIWEEKLY_DIR = "C:/OULU/TECHDEBT2023/data/biweekly_data"
-#MONTHLY_DIR = "C:/OULU/TECHDEBT2023/data/monthly_data"
-
 
 def varianceThreshold(MULTIVARIATE_PATH):
     # 1. VARIANCE THRESOLDING (If a column has low variance, it means it doesn't change
@@ -227,6 +220,7 @@ def interpolator(biweekly_dfs, monthly_dfs, project_names):
             os.mkdir(os.path.join(DATA_PATH, 'decomposition_plots', "biweekly_plots"))
 
         decomposition_plot(proname_clean, biweekly_data, monthly_data, decomposition_path)
+
 
 def data_prepare():
 
