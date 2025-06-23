@@ -1,4 +1,4 @@
-# Replication package for the Journal of Systems and Software (JSS) submitted article : *"Evaluating Time-Dependent Methods and Seasonal Effects in Code Technical Debt Prediction"*
+# Journal of Systems and Software (JSS) submitted article : *"Evaluating Time-Dependent Methods and Seasonal Effects in Code Technical Debt Prediction"*
 
 This replication package contains all the Python code to conduct the data collection, preprocessing and analysis of this study.
 
